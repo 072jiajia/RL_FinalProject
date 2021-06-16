@@ -1,8 +1,7 @@
-Wrtie something here later if it's necessary
 
 
-Just test this code on cpu
-GPU might not be faster since the model is very small (and I didn't put any .cuda() in it)
+This code was edited from https://github.com/iankgoode/DQN-for-LunarLander-v2/blob/master/dqn.ipynb
+
 
 ## Installation
 All requirements should be detailed in requirements.txt. Using virtual environment is recommended.
