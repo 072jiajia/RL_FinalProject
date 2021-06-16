@@ -14,7 +14,7 @@ All requirements should be detailed in requirements.txt. Using virtual environme
 
 ## Run the code
 ```
-    python AverageDQN_torch.py
+    python {AveragedDQN.py, DQN.py}
 ```
 
 
