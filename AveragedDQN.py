@@ -1,11 +1,13 @@
-import gym
+import gym, json
 import random
+from datetime import datetime
 import torch
+import argparse
 import numpy as np
 from collections import namedtuple, deque
 import matplotlib.pyplot as plt
 
-import torch
+import torch, os
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -23,11 +25,21 @@ GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
 LR = 5e-4               # learning rate 
 UPDATE_EVERY = 4        # how often to update the network
-num_model = 10
+num_model = 10          # K in Avg DQN
+
+
+parser = argparse.ArgumentParser(description='Avg DQN')
+parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
+parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
+args = parser.parse_args()
 
 # Use GPU is possible else use CPU
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_no
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+#GLOBAL VAR
+last_episode = 0
+last_score = 0
 
 class QNetwork(nn.Module):
     """Actor (Policy) Model."""
@@ -74,7 +86,7 @@ class Agent():
         # Q-Network
         self.qnetwork_local = QNetwork(state_size, action_size, seed).to(device)
         self.qnetwork_targets = deque()
-        for _ in range(10):
+        for _ in range(args.num_model):
             self.qnetwork_targets.append(QNetwork(state_size, action_size, seed).to(device))
 
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
@@ -88,7 +100,7 @@ class Agent():
     def step(self, state, action, reward, next_state, done):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, done)
-        
+
         # Learn every UPDATE_EVERY time steps.
         self.t_step = (self.t_step + 1) % UPDATE_EVERY
         if self.t_step == 0:
@@ -132,14 +144,14 @@ class Agent():
             Q_targets_next = 0
             for qnetwork_target in self.qnetwork_targets:
                 Q_targets_next += qnetwork_target(next_states)
-            Q_targets_next = Q_targets_next / num_model
+            Q_targets_next = Q_targets_next / args.num_model
             Q_targets_next = Q_targets_next.detach().max(1)[0].unsqueeze(1)
 
         # Compute Q targets for current states 
-        Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
+        Q_targets = rewards + (gamma * Q_targets_next * (1 - dones)) #shape = (batch_size,1)
 
         # Get expected Q values from local model
-        Q_expected = self.qnetwork_local(states).gather(1, actions)
+        Q_expected = self.qnetwork_local(states).gather(1, actions) #shape = (batch_size,1)
 
         # Compute loss
         loss = F.mse_loss(Q_expected, Q_targets)
@@ -167,8 +179,8 @@ class Agent():
             target_param.data.copy_(local_param.data)
         
         self.replace_model += 1
-        if self.replace_model >= num_model:
-            self.replace_model -= num_model
+        if self.replace_model >= args.num_model:
+            self.replace_model -= args.num_model
 
 
 class ReplayBuffer:
@@ -239,6 +251,7 @@ def dqn(agent, n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_dec
                 break 
         scores_window.append(score)       # save most recent score
         scores.append(score)              # save most recent score
+        last_episode = i_episode; last_score = score
         eps = max(eps_end, eps_decay*eps) # decrease epsilon
         print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)), end="")
         if i_episode % 100 == 0:
@@ -251,6 +264,13 @@ def dqn(agent, n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_dec
 
 agent = Agent(env.observation_space.shape[0], env.action_space.n, 1)
 scores = dqn(agent)
+
+# create log file
+log = {'last_episode': last_episode, 'last_score': last_score, 'scores': scores}
+time_now = datetime.now()
+time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
+with open('log/log_k-'+str(args.num_model)+"_"+time_string+".json", 'w') as outfile:
+    json.dump(log, outfile)
 
 # plot the scores
 fig = plt.figure()
