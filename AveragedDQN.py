@@ -12,8 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-
-env = gym.make('LunarLander-v2')
+env_name = 'LunarLander-v2'
+env = gym.make(env_name)
 env.seed(0)
 print('State shape: ', env.observation_space.shape)
 print('Number of Actions: ', env.action_space.n)
@@ -30,7 +30,9 @@ num_model = 10          # K in Avg DQN
 
 parser = argparse.ArgumentParser(description='Avg DQN')
 parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
+parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
+
 args = parser.parse_args()
 
 # Use GPU is possible else use CPU
@@ -224,7 +226,7 @@ class ReplayBuffer:
         return len(self.memory)
 
 
-def dqn(agent, n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.995):
+def dqn(agent, n_episodes=10, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.995):
     """Deep Q-Learning.
     
     Params
@@ -235,6 +237,7 @@ def dqn(agent, n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_dec
         eps_end (float): minimum value of epsilon
         eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
     """
+    global last_score, last_episode
     scores = []                        # list containing scores from each episode
     scores_window = deque(maxlen=100)  # last 100 scores
     eps = eps_start                    # initialize epsilon
@@ -262,14 +265,14 @@ def dqn(agent, n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_dec
             break
     return scores
 
-agent = Agent(env.observation_space.shape[0], env.action_space.n, 1)
+agent = Agent(env.observation_space.shape[0], env.action_space.n, seed=args.seed)
 scores = dqn(agent)
 
 # create log file
-log = {'last_episode': last_episode, 'last_score': last_score, 'scores': scores}
 time_now = datetime.now()
 time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
-with open('log/log_k-'+str(args.num_model)+"_"+time_string+".json", 'w') as outfile:
+log = {'time': time_string, 'last_episode': last_episode, 'last_score': last_score, 'scores': scores}
+with open('log/'+env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
     json.dump(log, outfile)
 
 # plot the scores

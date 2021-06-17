@@ -13,7 +13,7 @@ All requirements should be detailed in requirements.txt. Using virtual environme
 
 ## Run the code
 ```
-    python AveragedDQN.py --gpu_no=5 --num_model=5
+    python AveragedDQN.py --gpu_no=5 --num_model=5 --seed=0
     python DQN.py
 ```
 
