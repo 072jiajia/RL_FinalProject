@@ -22,16 +22,15 @@ UPDATE_EVERY = 4        # how often to update the network
 
 
 parser = argparse.ArgumentParser(description='Avg DQN')
-parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
+parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
-parser.add_argument('--env_name', type=str, default='LunarLander-v2', metavar='N', help='environment for experiment')
+parser.add_argument('--env_name', type=str, default='Breakout-v0', metavar='N', help='environment for experiment')
 parser.add_argument('--n_episodes', type=int, default=2000, metavar='N', help='number of episode for training')
 parser.add_argument('--quick_stop', type=str, default='n', help='train util last episode? [y/n]')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 
 args = parser.parse_args()
-
 LR = args.lr
 
 env_name = (args.env_name).replace('\r', '')
@@ -56,7 +55,7 @@ last_score = 0
 class QNetwork(nn.Module):
     """Actor (Policy) Model."""
 
-    def __init__(self, state_size, action_size, seed, fc1_units=64, fc2_units=64):
+    def __init__(self, state_size, action_size, seed, fc1_units=64, fc2_units=64, env_name = ''):
         """Initialize parameters and build model.
         Params
         ======
@@ -67,21 +66,38 @@ class QNetwork(nn.Module):
             fc2_units (int): Number of nodes in second hidden layer
         """
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_size, fc1_units)
-        self.fc2 = nn.Linear(fc1_units, fc2_units)
-        self.fc3 = nn.Linear(fc2_units, action_size)
+        env_name = env_name.replace('\r', '')
+        if(env_name == 'Seaquest-v0' or env_name == 'Asterix-v0' or env_name == 'Breakout-v0'):
+            #sorry to hardcode XD
+            self.fc1 = nn.Linear(state_size, 128)
+            self.fc2 = nn.Linear(128, 128)
+            self.fc3 = nn.Linear(128, 128)
+            self.fc4 = nn.Linear(128, 128)
+            self.fc5 = nn.Linear(128, action_size)
+        else:
+            self.fc1 = nn.Linear(state_size, fc1_units)
+            self.fc2 = nn.Linear(fc1_units, fc2_units)
+            self.fc3 = nn.Linear(fc2_units, action_size)
 
     def forward(self, state):
         """Build a network that maps state -> action values."""
-        x = F.relu(self.fc1(state))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        if (env_name == 'Seaquest-v0' or env_name == 'Asterix-v0' or env_name == 'Breakout-v0'):
+            x = F.relu(self.fc1(state))
+            x = F.relu(self.fc2(x))
+            x = F.relu(self.fc3(x))
+            x = F.relu(self.fc4(x))
+            x = self.fc5(x)
+        else:
+            x = F.relu(self.fc1(state))
+            x = F.relu(self.fc2(x))
+            x = self.fc3(x)
+        return x
 
 
 class Agent():
     """Interacts with and learns from the environment."""
 
-    def __init__(self, state_size, action_size, seed):
+    def __init__(self, state_size, action_size, seed, env_name):
         """Initialize an Agent object.
         
         Params
@@ -94,10 +110,10 @@ class Agent():
         self.action_size = action_size
 
         # Q-Network
-        self.qnetwork_local = QNetwork(state_size, action_size, seed).to(device)
+        self.qnetwork_local = QNetwork(state_size, action_size, seed, env_name=env_name).to(device)
         self.qnetwork_targets = deque()
         for _ in range(args.num_model):
-            self.qnetwork_targets.append(QNetwork(state_size, action_size, seed).to(device))
+            self.qnetwork_targets.append(QNetwork(state_size, action_size, seed, env_name=env_name).to(device))
         # create this list to maintain the order of newest to oldest target network
         self.qnetwork_targets_idx = [i for i in range(args.num_model)]
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
@@ -268,10 +284,12 @@ def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.
     eps = eps_start                        # initialize epsilon
     for i_episode in range(1, n_episodes+1):
         state = env.reset()
+        state = np.reshape(state,(-1))
         score = 0; value_est = 0; n_steps = 0.0
         for t in range(max_t):
             action = agent.act(state, eps)
             next_state, reward, done, _ = env.step(action)
+            next_state = np.reshape(next_state, (-1))
             agent.step(state, action, reward, next_state, done)
             value_est += agent.take_value_estimate(state)
             state = next_state
@@ -285,11 +303,11 @@ def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.
         value_ests.append(value_est)                            # save most recent value est.
         last_episode = i_episode; last_score = score
         eps = max(eps_end, eps_decay*eps) # decrease epsilon
-        print('\rEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(i_episode,
+        print('\rEnv {}\tEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
                                                                                np.mean(scores_window),
                                                                                np.mean(value_ests_window)), end="")
         if i_episode % 100 == 0:
-            print('\rEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(i_episode,
+            print('\rEnv {}\tEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
                                                                                    np.mean(scores_window),
                                                                                    np.mean(value_ests_window)))
         if np.mean(scores_window)>=200.0:
@@ -298,8 +316,12 @@ def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.
             if args.quick_stop == 'y':
                 break
     return scores, value_ests
-
-agent = Agent(env.observation_space.shape[0], env.action_space.n, seed=args.seed)
+temp = env.observation_space.shape; state_size = 1
+for i in temp:
+    state_size *= i
+agent = Agent(state_size=state_size,
+              action_size=env.action_space.n,
+              seed=args.seed, env_name=env_name)
 scores, value_ests = dqn(agent, args.n_episodes)
 
 # create log file
