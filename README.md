@@ -13,13 +13,13 @@ All requirements should be detailed in requirements.txt. Using virtual environme
 
 ## Run the code
 ```
-    python AveragedDQN.py --gpu_no=5 --num_model=5 --seed=0
+    python AveragedDQN.py --gpu_no=5 --num_model=5 --seed=0 --n_episodes=1000 --env_name=LunarLander-v2
     python DQN.py
 ```
 TODO:
-1. Experiment using env used in the paper (3 atari games, 1 gridwolrd)
-2. Log the average value
-3. 
+1. Experiment using env used in the paper (WIP)
+2. Log the average value (DONE)
+3. Recency weighting version
 
 .sh
 

@@ -6,6 +6,7 @@ import numpy as np
 FOLDER_PATH = ["log/lunarlender_k5"]
 
 def main():
+    check = '\r'
     avg_list = []; std_list = []; idx_list = []
     for path in FOLDER_PATH:
         avg, std, idx = read_log(path)

@@ -25,8 +25,8 @@ parser = argparse.ArgumentParser(description='Avg DQN')
 parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
-parser.add_argument('--env_name', type=str, metavar='N', help='environment for experiment')
-parser.add_argument('--n_episodes', type=int, metavar='N', help='number of episode for training')
+parser.add_argument('--env_name', type=str, default='LunarLander-v2', metavar='N', help='environment for experiment')
+parser.add_argument('--n_episodes', type=int, default=2000, metavar='N', help='number of episode for training')
 parser.add_argument('--quick_stop', type=str, default='n', help='train util last episode? [y/n]')
 parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 
@@ -34,7 +34,7 @@ args = parser.parse_args()
 
 LR = args.lr
 
-env_name = args.env_name
+env_name = (args.env_name).replace('\r', '')
 env = gym.make(env_name)
 print('State shape: ', env.observation_space.shape)
 print('Number of Actions: ', env.action_space.n)
@@ -98,7 +98,8 @@ class Agent():
         self.qnetwork_targets = deque()
         for _ in range(args.num_model):
             self.qnetwork_targets.append(QNetwork(state_size, action_size, seed).to(device))
-
+        # create this list to maintain the order of newest to oldest target network
+        self.qnetwork_targets_idx = [i for i in range(args.num_model)]
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
 
         # Replay memory
@@ -106,7 +107,7 @@ class Agent():
         # Initialize time step (for updating every UPDATE_EVERY steps)
         self.t_step = 0
         self.replace_model = 0
-    
+
     def step(self, state, action, reward, next_state, done):
         # Save experience in replay memory
         self.memory.add(state, action, reward, next_state, done)
@@ -187,10 +188,25 @@ class Agent():
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             # target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
             target_param.data.copy_(local_param.data)
-        
+        #update list maintaining the newest-oldest target model order: newest is in the last element
+        self.qnetwork_targets_idx.remove(self.replace_model)
+        self.qnetwork_targets_idx.append(self.replace_model)
+
         self.replace_model += 1
         if self.replace_model >= args.num_model:
             self.replace_model -= args.num_model
+
+
+
+    def take_value_estimate(self, state):
+        state = torch.from_numpy(state).float().to(device)
+        with torch.no_grad():
+            value_estimate = 0
+            for k in range(args.num_model-1,-1,-1): #loop from the newest to the oldest model, in case later needed for recency-weighting avg
+                value_estimate += self.qnetwork_targets[k](state)
+            value_estimate = value_estimate / args.num_model
+            value_estimate = np.max(value_estimate.cpu().detach().numpy())
+        return value_estimate
 
 
 class ReplayBuffer:
@@ -245,44 +261,55 @@ def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.
         eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
     """
     global last_score, last_episode
-    scores = []                        # list containing scores from each episode
-    scores_window = deque(maxlen=100)  # last 100 scores
-    eps = eps_start                    # initialize epsilon
+    scores = []                            # list containing scores from each episode
+    scores_window = deque(maxlen=100)      # last 100 scores
+    value_ests = []                        # list containing value estimates from each episode
+    value_ests_window = deque(maxlen=100)  # last 100 scores
+    eps = eps_start                        # initialize epsilon
     for i_episode in range(1, n_episodes+1):
         state = env.reset()
-        score = 0
+        score = 0; value_est = 0; n_steps = 0.0
         for t in range(max_t):
             action = agent.act(state, eps)
             next_state, reward, done, _ = env.step(action)
             agent.step(state, action, reward, next_state, done)
+            value_est += agent.take_value_estimate(state)
             state = next_state
             score += reward
-            if done: --> last state of each episode --> feed to QNetwork --> max_a(Q) --> value function --> avg(Q) from last -> last-k
-                break 
-        scores_window.append(score)       # save most recent score
-        scores.append(score)              # save most recent score
+            n_steps += 1.0
+            if done:
+                break
+        value_est = (float)(value_est)/(float)(n_steps)
+        scores_window.append(score); value_ests_window.append(value_est)
+        scores.append(score)                                    # save most recent score
+        value_ests.append(value_est)                            # save most recent value est.
         last_episode = i_episode; last_score = score
         eps = max(eps_end, eps_decay*eps) # decrease epsilon
-        print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)), end="")
+        print('\rEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(i_episode,
+                                                                               np.mean(scores_window),
+                                                                               np.mean(value_ests_window)), end="")
         if i_episode % 100 == 0:
-            print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)))
+            print('\rEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(i_episode,
+                                                                                   np.mean(scores_window),
+                                                                                   np.mean(value_ests_window)))
         if np.mean(scores_window)>=200.0:
             print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, np.mean(scores_window)))
             torch.save(agent.qnetwork_local.state_dict(), 'checkpoint.pth')
             if args.quick_stop == 'y':
                 break
-    return scores
+    return scores, value_ests
 
 agent = Agent(env.observation_space.shape[0], env.action_space.n, seed=args.seed)
-scores = dqn(agent, args.n_episodes)
+scores, value_ests = dqn(agent, args.n_episodes)
 
 # create log file
 time_now = datetime.now()
 time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
-log = {'time': time_string, 'last_episode': last_episode, 'last_score': last_score, 'scores': scores}
+log = {'time': time_string, 'last_episode': last_episode, 'last_score': last_score, 'scores': scores, 'value_est': value_ests}
 
 # save other parameters just in case that we change them in future experiments
-log.update({'BUFFER_SIZE': BUFFER_SIZE,
+log.update({'NETWORK': repr(agent.qnetwork_local),
+            'BUFFER_SIZE': BUFFER_SIZE,
             'BATCH_SIZE': BATCH_SIZE,
             'GAMMA': GAMMA,
             'TAU': TAU,
