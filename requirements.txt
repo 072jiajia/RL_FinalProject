@@ -1,3 +1,4 @@
 gym
 torch
 numpy
+matplotlib

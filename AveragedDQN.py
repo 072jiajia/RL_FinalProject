@@ -1,39 +1,49 @@
-import gym, json
+import os
+import gym
+import json
 import random
 from datetime import datetime
-import torch
 import argparse
 import numpy as np
 from collections import namedtuple, deque
 import matplotlib.pyplot as plt
 
-import torch, os
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
-env_name = 'LunarLander-v2'
-env = gym.make(env_name)
-env.seed(0)
-print('State shape: ', env.observation_space.shape)
-print('Number of Actions: ', env.action_space.n)
 
 # Define the DQN hyperparameters
 BUFFER_SIZE = int(1e5)  # replay buffer size
 BATCH_SIZE = 64         # minibatch size
 GAMMA = 0.99            # discount factor
 TAU = 1e-3              # for soft update of target parameters
-LR = 5e-4               # learning rate 
 UPDATE_EVERY = 4        # how often to update the network
-num_model = 10          # K in Avg DQN
 
 
 parser = argparse.ArgumentParser(description='Avg DQN')
 parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
+parser.add_argument('--env_name', type=str, metavar='N', help='environment for experiment')
+parser.add_argument('--n_episodes', type=int, metavar='N', help='number of episode for training')
+parser.add_argument('--quick_stop', type=str, default='n', help='train util last episode? [y/n]')
+parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 
 args = parser.parse_args()
+
+LR = args.lr
+
+env_name = args.env_name
+env = gym.make(env_name)
+print('State shape: ', env.observation_space.shape)
+print('Number of Actions: ', env.action_space.n)
+
+env.seed(args.seed)
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed(args.seed)
 
 # Use GPU is possible else use CPU
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_no
@@ -57,7 +67,6 @@ class QNetwork(nn.Module):
             fc2_units (int): Number of nodes in second hidden layer
         """
         super(QNetwork, self).__init__()
-        self.seed = torch.manual_seed(seed)
         self.fc1 = nn.Linear(state_size, fc1_units)
         self.fc2 = nn.Linear(fc1_units, fc2_units)
         self.fc3 = nn.Linear(fc2_units, action_size)
@@ -83,7 +92,6 @@ class Agent():
         """
         self.state_size = state_size
         self.action_size = action_size
-        self.seed = random.seed(seed)
 
         # Q-Network
         self.qnetwork_local = QNetwork(state_size, action_size, seed).to(device)
@@ -202,7 +210,6 @@ class ReplayBuffer:
         self.memory = deque(maxlen=buffer_size)  
         self.batch_size = batch_size
         self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
-        self.seed = random.seed(seed)
     
     def add(self, state, action, reward, next_state, done):
         """Add a new experience to memory."""
@@ -226,7 +233,7 @@ class ReplayBuffer:
         return len(self.memory)
 
 
-def dqn(agent, n_episodes=10, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.995):
+def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.995):
     """Deep Q-Learning.
     
     Params
@@ -262,23 +269,34 @@ def dqn(agent, n_episodes=10, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay
         if np.mean(scores_window)>=200.0:
             print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, np.mean(scores_window)))
             torch.save(agent.qnetwork_local.state_dict(), 'checkpoint.pth')
-            break
+            if args.quick_stop == 'y':
+                break
     return scores
 
 agent = Agent(env.observation_space.shape[0], env.action_space.n, seed=args.seed)
-scores = dqn(agent)
+scores = dqn(agent, args.n_episodes)
 
 # create log file
 time_now = datetime.now()
 time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
 log = {'time': time_string, 'last_episode': last_episode, 'last_score': last_score, 'scores': scores}
+
+# save other parameters just in case that we change them in future experiments
+log.update({'BUFFER_SIZE': BUFFER_SIZE,
+            'BATCH_SIZE': BATCH_SIZE,
+            'GAMMA': GAMMA,
+            'TAU': TAU,
+            'LR': LR,
+            'UPDATE_EVERY': UPDATE_EVERY
+})
+
 with open('log/'+env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
     json.dump(log, outfile)
 
-# plot the scores
-fig = plt.figure()
-ax = fig.add_subplot(111)
-plt.plot(np.arange(len(scores)), scores)
-plt.ylabel('Score')
-plt.xlabel('Episode #')
-plt.savefig('Averaged-DQN.png')
+# # plot the scores
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# plt.plot(np.arange(len(scores)), scores)
+# plt.ylabel('Score')
+# plt.xlabel('Episode #')
+# plt.savefig('Averaged-DQN.png')
