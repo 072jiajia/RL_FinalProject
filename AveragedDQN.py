@@ -250,7 +250,7 @@ def dqn(agent, n_episodes=10, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay
             agent.step(state, action, reward, next_state, done)
             state = next_state
             score += reward
-            if done:
+            if done: --> last state of each episode --> feed to QNetwork --> max_a(Q) --> value function --> avg(Q) from last -> last-k
                 break 
         scores_window.append(score)       # save most recent score
         scores.append(score)              # save most recent score

@@ -16,6 +16,11 @@ All requirements should be detailed in requirements.txt. Using virtual environme
     python AveragedDQN.py --gpu_no=5 --num_model=5 --seed=0
     python DQN.py
 ```
+TODO:
+1. Experiment using env used in the paper (3 atari games, 1 gridwolrd)
+2. Log the average value
+3. 
 
+.sh
 
 
