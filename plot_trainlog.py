@@ -3,7 +3,10 @@ import json, glob
 import numpy as np
 
 # put all (typically 7) logfiles for each "k", for all seed numbers, in separated folder
-FOLDER_PATH = ["log/lunarlender_k5"]
+FOLDER_PATH = ["log/lunarlander_k1",
+               "log/lunarlander_k5",
+               "log/lunarlander_k10",
+               "log/lunarlander_k15"]
 
 def main():
     avg_sc_list = []; std_sc_list = []; avg_val_list = []; std_val_list = []; idx_list = []
@@ -13,11 +16,14 @@ def main():
         avg_val_list.append(avg_val_est); std_val_list.append(std_val_est); idx_list.append(idx)
 
     # plot the avg and std
-    label = ['Averaged DQN, K=5']
+    label = ['Averaged DQN, K=1',
+             'Averaged DQN, K=5',
+             'Averaged DQN, K=10',
+             'Averaged DQN, K=15',]
     plt.figure()
     plt.title("Average score")
     for i in range(len(avg_sc_list)):
-        plt.plot(idx_list[i], avg_sc_list[i], label=label[i])
+        plt.plot(idx_list[i], avg_sc_list[i], ':', label=label[i], linewidth=1)
         plt.fill_between(idx_list[i], avg_sc_list[i] - std_sc_list[i], avg_sc_list[i] + std_sc_list[i], alpha=0.3)
     plt.xlabel("Episode")
     plt.ylabel("Averaged score")
@@ -26,7 +32,7 @@ def main():
     plt.figure()
     plt.title("Value estimate")
     for i in range(len(avg_val_list)):
-        plt.plot(idx_list[i], avg_val_list[i], label=label[i])
+        plt.plot(idx_list[i], avg_val_list[i], ':', label=label[i], linewidth=1)
         plt.fill_between(idx_list[i], avg_val_list[i] - std_val_list[i], avg_val_list[i] + std_val_list[i], alpha=0.3)
     plt.xlabel("Episode")
     plt.ylabel("Averaged score")
