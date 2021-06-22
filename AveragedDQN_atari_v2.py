@@ -30,7 +30,7 @@ parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No 
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
 parser.add_argument('--env_name', type=str, default='Breakout-v0', metavar='N', help='environment for experiment')
-parser.add_argument('--total_frames', type=int, default=120e6, metavar='N', help='number of frames for training')
+parser.add_argument('--total_frames', type=float, default=120e6, metavar='N', help='number of frames for training')
 parser.add_argument('--quick_stop', type=str, default='n', help='train util last episode? [y/n]')
 parser.add_argument('--lr', type=float, default=25e-5, help='learning rate') #paper uses 25e-5
 parser.add_argument('--num_frame', type=int, default=4, help='use N latest frame to feed to the NN')
@@ -319,7 +319,7 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
     
     Params
     ======
-        total_frames (int): maximum number of training frames
+        total_frames (float): maximum number of training frames
         max_t (int): maximum number of timesteps per episode
         eps_start (float): starting value of epsilon, for epsilon-greedy action selection
         eps_end (float): minimum value of epsilon
@@ -360,7 +360,7 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
             agent.step(state, action, reward, next_state, done)
             # value_est += agent.take_value_estimate(state)
             # score += reward
-            if (total_steps%N_STEP_EVAL == 0 and total_steps != 0): #evaluate the agent per N_STEP_EVAL
+            if (total_steps%N_STEP_EVAL == 0): #evaluate the agent per N_STEP_EVAL
                 score, value_est = evaluate(agent,args.env_name)
                 scores_window.append(score)
                 value_ests_window.append(value_est)
