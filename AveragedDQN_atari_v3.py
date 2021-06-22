@@ -22,11 +22,11 @@ TAU = 1e-3                       # for soft update of target parameters
 UPDATE_EVERY = 4                 # how often to update the network
 FREEZE_INTERVAL = 10000          # the paper uses 10k
 LAST_STEP_DECREASING_EPS = 1e6   # epsilon will decrease from 1 to 0.1 until this step
-N_STEP_EVAL = (int)(1e6)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
+N_STEP_EVAL = (int)(1e4)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
 
 
 parser = argparse.ArgumentParser(description='Avg DQN')
-parser.add_argument('--gpu_no', type=str, default='4', metavar='i-th', help='No GPU')
+parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
 parser.add_argument('--env_name', type=str, default='Breakout-v0', metavar='N', help='environment for experiment')
@@ -52,16 +52,13 @@ torch.cuda.manual_seed(args.seed)
 
 # Use GPU is possible else use CPU
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_no
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # GLOBAL VAR
 LAST_EPISODE = 0
 LAST_SCORE = 0
 LAST_FRAMES = 0
 
-
-import torchvision
 
 def is_Atari(env_name):
     return env_name == 'Seaquest-v0' or env_name == 'Asterix-v0' or env_name == 'Breakout-v0'
@@ -315,6 +312,29 @@ def evaluate(agent, env_name):
     return score, value_est/n_steps_cur_episode
 
 
+def store_json(scores, value_ests):
+    # create log file
+    time_now = datetime.now()
+    time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
+    log = {'time': time_string, 'last_steps': LAST_FRAMES, 'last_episode': LAST_EPISODE, 'last_score': LAST_SCORE, 'scores': scores, 'value_est': value_ests}
+
+    # save other parameters just in case that we change them in future experiments
+    log.update({'NETWORK': repr(agent.qnetwork_local),
+                'BUFFER_SIZE': BUFFER_SIZE,
+                'BATCH_SIZE': BATCH_SIZE,
+                'GAMMA': GAMMA,
+                'TAU': TAU,
+                'LR': LR,
+                'UPDATE_EVERY': UPDATE_EVERY,
+                'FREEZE_INTERVAL': FREEZE_INTERVAL,
+                'LAST_STEP_DECREASING_EPS': LAST_STEP_DECREASING_EPS,
+                'N_STEP_EVAL': N_STEP_EVAL
+    })
+
+    with open('log/recent' + str(args.num_frame) + '_' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
+        json.dump(log, outfile)
+
+
 def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.995): #paper use eps_end = 0.1
     """Deep Q-Learning.
     
@@ -384,13 +404,15 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
             print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
                                                                                                      total_steps, score,
                                                                                                      value_est))
-        if np.mean(scores_window)>=200.0:
-            print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, np.mean(scores_window)))
-            torch.save(agent.qnetwork_local.state_dict(), 'checkpoint.pth')
-            if args.quick_stop == 'y':
-                break
+        # if np.mean(scores_window)>=200.0:
+        #     print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, np.mean(scores_window)))
+        #     torch.save(agent.qnetwork_local.state_dict(), 'checkpoint.pth')
+        #     if args.quick_stop == 'y':
+        #         break
         if (total_steps >= total_frames): #quite training after total_frames
             break
+
+        store_json(scores, value_ests)
     return scores, value_ests
 
 state_size = env.observation_space.shape
@@ -400,23 +422,3 @@ agent = Agent(state_size=state_size,
               env_name=env_name)
 scores, value_ests = dqn(agent, total_frames=args.total_frames)
 
-# create log file
-time_now = datetime.now()
-time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
-log = {'time': time_string, 'last_steps': LAST_FRAMES, 'last_episode': LAST_EPISODE, 'last_score': LAST_SCORE, 'scores': scores, 'value_est': value_ests}
-
-# save other parameters just in case that we change them in future experiments
-log.update({'NETWORK': repr(agent.qnetwork_local),
-            'BUFFER_SIZE': BUFFER_SIZE,
-            'BATCH_SIZE': BATCH_SIZE,
-            'GAMMA': GAMMA,
-            'TAU': TAU,
-            'LR': LR,
-            'UPDATE_EVERY': UPDATE_EVERY,
-            'FREEZE_INTERVAL': FREEZE_INTERVAL,
-            'LAST_STEP_DECREASING_EPS': LAST_STEP_DECREASING_EPS,
-            'N_STEP_EVAL': N_STEP_EVAL
-})
-
-with open('log/recent' + str(args.num_frame) + '_' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
-    json.dump(log, outfile)
