@@ -49,8 +49,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_no
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 #GLOBAL VAR
-last_episode = 0
-last_score = 0
+LAST_EPISODE = 0
+LAST_SCORE = 0
 
 class QNetwork(nn.Module):
     """Actor (Policy) Model."""
@@ -276,7 +276,7 @@ def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.
         eps_end (float): minimum value of epsilon
         eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
     """
-    global last_score, last_episode
+    global LAST_SCORE, LAST_EPISODE
     scores = []                            # list containing scores from each episode
     scores_window = deque(maxlen=100)      # last 100 scores
     value_ests = []                        # list containing value estimates from each episode
@@ -327,7 +327,7 @@ scores, value_ests = dqn(agent, args.n_episodes)
 # create log file
 time_now = datetime.now()
 time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
-log = {'time': time_string, 'last_episode': last_episode, 'last_score': last_score, 'scores': scores, 'value_est': value_ests}
+log = {'time': time_string, 'last_episode': LAST_EPISODE, 'last_score': LAST_SCORE, 'scores': scores, 'value_est': value_ests}
 
 # save other parameters just in case that we change them in future experiments
 log.update({'NETWORK': repr(agent.qnetwork_local),

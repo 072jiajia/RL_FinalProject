@@ -15,20 +15,22 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 # Define the DQN hyperparameters
-BUFFER_SIZE = (int)(1e6)                     # replay buffer size: paper uses 1M
-BATCH_SIZE = 32                       # minibatch size
-GAMMA = 0.99                          # discount factor
-TAU = 1e-3                            # for soft update of target parameters
-UPDATE_EVERY = 4                      # how often to update the network
-FREEZE_INTERVAL = 10000               # the paper uses 10k
+BUFFER_SIZE = (int)(1e6)         # replay buffer size: paper uses 1M
+BATCH_SIZE = 32                  # minibatch size
+GAMMA = 0.99                     # discount factor
+TAU = 1e-3                       # for soft update of target parameters
+UPDATE_EVERY = 4                 # how often to update the network
+FREEZE_INTERVAL = 10000          # the paper uses 10k
 LAST_STEP_DECREASING_EPS = 1e6   # epsilon will decrease from 1 to 0.1 until this step
+N_STEP_EVAL = (int)(1e6)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
+
 
 parser = argparse.ArgumentParser(description='Avg DQN')
 parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
 parser.add_argument('--env_name', type=str, default='Breakout-v0', metavar='N', help='environment for experiment')
-parser.add_argument('--n_episodes', type=int, default=5000, metavar='N', help='number of episode for training')
+parser.add_argument('--total_frames', type=int, default=120e6, metavar='N', help='number of frames for training')
 parser.add_argument('--quick_stop', type=str, default='n', help='train util last episode? [y/n]')
 parser.add_argument('--lr', type=float, default=25e-5, help='learning rate') #paper uses 25e-5
 parser.add_argument('--num_frame', type=int, default=4, help='use N latest frame to feed to the NN')
@@ -38,6 +40,7 @@ LR = args.lr
 
 env_name = (args.env_name).replace('\r', '')
 env = gym.make(env_name)
+env_test = gym.make(env_name)
 print('State shape: ', env.observation_space.shape)
 print('Number of Actions: ', env.action_space.n)
 
@@ -54,6 +57,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # GLOBAL VAR
 LAST_EPISODE = 0
 LAST_SCORE = 0
+LAST_FRAMES = 0
+
 
 import torchvision
 
@@ -234,7 +239,7 @@ class Agent():
         with torch.no_grad():
             value_estimate = 0
             for k in range(args.num_model-1,-1,-1): #loop from the newest to the oldest model, in case later needed for recency-weighting avg
-                value_estimate += self.qnetwork_targets[k](state)
+                value_estimate += self.qnetwork_targets[self.qnetwork_targets_idx[k]](state)
             value_estimate = value_estimate / args.num_model
             value_estimate = np.max(value_estimate.cpu().detach().numpy())
         return value_estimate
@@ -284,90 +289,107 @@ def rgb2gray(state):
     # use this weights to do rgb2gray
     return np.dot(state[..., :3], [0.299, 0.587, 0.114])
 
-def evaluate(agent, env, env_name):
-    state = env.reset()
+def evaluate(agent, env_name):
+    state = env_test.reset()
     if is_Atari(env_name):
-        # state = np.mean(state, axis=2)
         state = rgb2gray(state)
-        # plt.imshow(state, cmap='gray', vmin=0, vmax=255)
-        # plt.show()
         state = cv2.resize(state, dsize=(84, 84))
 
     state = [state] * args.num_frame
+    score = 0; value_est = 0; n_steps_cur_episode = 0.0
     from itertools import count
     for t in count():
-        a = 0
+        action = agent.act(state)
+        next_state, reward, done, _ = env.step(action)
+        if is_Atari(env_name):
+            next_state = rgb2gray(next_state)
+            next_state = cv2.resize(next_state, dsize=(84, 84))
+        next_state = state[1:] + [next_state]
+        value_est += agent.take_value_estimate(state)
+        state = next_state
+        score += reward
+        n_steps_cur_episode += 1.0
+        if done:
+            break
+    return score, value_est/n_steps_cur_episode
 
 
-def dqn(agent, n_episodes, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.995): #paper use eps_end = 0.1
+def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.995): #paper use eps_end = 0.1
     """Deep Q-Learning.
     
     Params
     ======
-        n_episodes (int): maximum number of training episodes
+        total_frames (int): maximum number of training frames
         max_t (int): maximum number of timesteps per episode
         eps_start (float): starting value of epsilon, for epsilon-greedy action selection
         eps_end (float): minimum value of epsilon
         eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
     """
-    global LAST_SCORE, LAST_EPISODE
+    global LAST_SCORE, LAST_EPISODE, LAST_FRAMES
     scores = []                            # list containing scores from each episode
     scores_window = deque(maxlen=100)      # last 100 scores
     value_ests = []                        # list containing value estimates from each episode
     value_ests_window = deque(maxlen=100)  # last 100 scores
     eps = eps_start                        # initialize epsilon
-    total_steps = 0
-    for i_episode in range(1, n_episodes+1):
+    total_steps = 0                        # initialize total frames
+    from itertools import count as cnt1
+    # for i_episode in range(1, n_episodes+1):
+    for i_episode in cnt1():
+        i_episode += 1
         state = env.reset()
-        # plt.imshow(state)
         if is_Atari(env_name):
             # state = np.mean(state, axis=2)
             state = rgb2gray(state)
-            # plt.imshow(state, cmap='gray', vmin=0, vmax=255)
-            # plt.show()
             state = cv2.resize(state, dsize=(84, 84))
 
         state = [state] * args.num_frame
-        score = 0; value_est = 0; n_steps = 0.0
+        score = 0; value_est = 0; n_steps_cur_episode = 0.0
 
         # for t in range(max_t):
-        from itertools import count
-        for t in count():
+        from itertools import count as cnt2
+        for t in cnt2():
             action = agent.act(state, eps)
+            current_eps = ((eps_end - eps_start) * (float)(total_steps) / LAST_STEP_DECREASING_EPS) + eps_start
+            eps = max(eps_end, current_eps)  # use linear interpolation decay
             next_state, reward, done, _ = env.step(action)
             if is_Atari(env_name):
                 # next_state = np.mean(next_state, axis=2)
-                next_state = np.dot(next_state[..., :3], [0.299, 0.587, 0.114])
+                next_state = rgb2gray(next_state)
                 next_state = cv2.resize(next_state, dsize=(84, 84))
-            next_state = state[1:] + [next_state]
+            next_state = state[1:] + [next_state] #keep update for last args.num_frame
             agent.step(state, action, reward, next_state, done)
-            value_est += agent.take_value_estimate(state)
+            # value_est += agent.take_value_estimate(state)
+            # score += reward
+            if (total_steps%N_STEP_EVAL == 0 and total_steps != 0): #evaluate the agent per N_STEP_EVAL
+                score, value_est = evaluate(agent,args.env_name)
+                scores_window.append(score)
+                value_ests_window.append(value_est)
+                scores.append(score)  # save most recent score
+                value_ests.append(value_est)  # save most recent value est.
+                LAST_SCORE = score
             state = next_state
-            score += reward
-            n_steps += 1.0
+            n_steps_cur_episode += 1.0
             total_steps += 1
+            LAST_FRAMES = total_steps
             if done:
                 break
-        value_est = (float)(value_est)/(float)(n_steps)
-        scores_window.append(score); value_ests_window.append(value_est)
-        scores.append(score)                                    # save most recent score
-        value_ests.append(value_est)                            # save most recent value est.
-        last_episode = i_episode; last_score = score
-        current_eps = ((eps_end-eps_start) * total_steps / LAST_STEP_DECREASING_EPS)-eps_start
+        # value_est = (float)(value_est)/(float)(n_steps)
         # eps = max(eps_end, eps_decay*eps) # decrease epsilon
-        eps = max(eps_end, current_eps)  # use linear interpolation decay
-        print('\rEnv {}\tEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
-                                                                               np.mean(scores_window),
-                                                                               np.mean(value_ests_window)), end="")
+        LAST_EPISODE = i_episode
+        print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
+                                                                                                 total_steps, score,
+                                                                                                 value_est), end="")
         if i_episode % 100 == 0:
-            print('\rEnv {}\tEpisode {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
-                                                                                   np.mean(scores_window),
-                                                                                   np.mean(value_ests_window)))
+            print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
+                                                                                                     total_steps, score,
+                                                                                                     value_est))
         if np.mean(scores_window)>=200.0:
             print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, np.mean(scores_window)))
             torch.save(agent.qnetwork_local.state_dict(), 'checkpoint.pth')
             if args.quick_stop == 'y':
                 break
+        if (total_steps >= total_frames): #quite training after total_frames
+            break
     return scores, value_ests
 
 state_size = env.observation_space.shape
@@ -375,12 +397,12 @@ agent = Agent(state_size=state_size,
               action_size=env.action_space.n,
               seed=args.seed,
               env_name=env_name)
-scores, value_ests = dqn(agent, args.n_episodes)
+scores, value_ests = dqn(agent, total_frames=args.total_frames)
 
 # create log file
 time_now = datetime.now()
 time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
-log = {'time': time_string, 'last_episode': LAST_EPISODE, 'last_score': LAST_SCORE, 'scores': scores, 'value_est': value_ests}
+log = {'time': time_string, 'last_steps': LAST_FRAMES, 'last_episode': LAST_EPISODE, 'last_score': LAST_SCORE, 'scores': scores, 'value_est': value_ests}
 
 # save other parameters just in case that we change them in future experiments
 log.update({'NETWORK': repr(agent.qnetwork_local),
@@ -389,7 +411,10 @@ log.update({'NETWORK': repr(agent.qnetwork_local),
             'GAMMA': GAMMA,
             'TAU': TAU,
             'LR': LR,
-            'UPDATE_EVERY': UPDATE_EVERY
+            'UPDATE_EVERY': UPDATE_EVERY,
+            'FREEZE_INTERVAL': FREEZE_INTERVAL,
+            'LAST_STEP_DECREASING_EPS': LAST_STEP_DECREASING_EPS,
+            'N_STEP_EVAL': N_STEP_EVAL
 })
 
 with open('log/recent' + str(args.num_frame) + '_' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
