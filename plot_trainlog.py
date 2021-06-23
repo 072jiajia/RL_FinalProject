@@ -2,42 +2,60 @@ from matplotlib import pyplot as plt
 import json, glob
 import numpy as np
 
+
 # put all (typically 7) logfiles for each "k", for all seed numbers, in separated folder
-FOLDER_PATH = ["log/lunarlander_k1",
+LUNARLANDER = ["log/lunarlander_k1",
                "log/lunarlander_k5",
                "log/lunarlander_k10",
                "log/lunarlander_k15"]
+
+GRIDWORLD = ['log/gridworld_k1',
+             'log/gridworld_k5']
+
+# Ks = list(range(1, 11)) + [15, 20, 25, 50, 100]
+Ks = [1,2,3,4,5]
+
+ROULETTE = ["log/roulette_k" + str(k) for k in Ks] + ["log/roulette_ddqn"]
+# plot the avg and std
+# label = ['Averaged DQN, K=' + str(K) for K in Ks]
+label = ['K=' + str(K) for K in Ks] + ["Double QDN"]
+
+
+FOLDER_PATH = GRIDWORLD
 
 def main():
     avg_sc_list = []; std_sc_list = []; avg_val_list = []; std_val_list = []; idx_list = []
     for path in FOLDER_PATH:
         avg_score, std_score, avg_val_est, std_val_est, idx = read_log(path)
+        print("----------------_>", path)
         avg_sc_list.append(avg_score); std_sc_list.append(std_score)
         avg_val_list.append(avg_val_est); std_val_list.append(std_val_est); idx_list.append(idx)
 
-    # plot the avg and std
-    label = ['Averaged DQN, K=1',
-             'Averaged DQN, K=5',
-             'Averaged DQN, K=10',
-             'Averaged DQN, K=15',]
     plt.figure()
-    plt.title("Average score")
     for i in range(len(avg_sc_list)):
-        plt.plot(idx_list[i], avg_sc_list[i], ':', label=label[i], linewidth=1)
+        if i < 10:
+            plt.plot(idx_list[i], avg_sc_list[i], label=label[i], linewidth=1)
+        else:
+            plt.plot(idx_list[i], avg_sc_list[i], ':', label=label[i], linewidth=1)
         plt.fill_between(idx_list[i], avg_sc_list[i] - std_sc_list[i], avg_sc_list[i] + std_sc_list[i], alpha=0.3)
     plt.xlabel("Episode")
     plt.ylabel("Averaged score")
-    plt.legend()
+    plt.legend(prop={'size': 8}, ncol=2)
+    plt.savefig('Roulette1.png')
 
     plt.figure()
-    plt.title("Value estimate")
     for i in range(len(avg_val_list)):
-        plt.plot(idx_list[i], avg_val_list[i], ':', label=label[i], linewidth=1)
+        if i < 10:
+            plt.plot(idx_list[i], avg_val_list[i], label=label[i], linewidth=1)
+        else:
+            plt.plot(idx_list[i], avg_val_list[i], ':', label=label[i], linewidth=1)
         plt.fill_between(idx_list[i], avg_val_list[i] - std_val_list[i], avg_val_list[i] + std_val_list[i], alpha=0.3)
     plt.xlabel("Episode")
-    plt.ylabel("Averaged score")
-    plt.legend()
+    plt.ylabel("Value estimate")
+    plt.legend(prop={'size': 8}, ncol=2)
+    # plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
 
+    plt.savefig('Roulette2.png')
     plt.show()
 
 

@@ -1,56 +1,51 @@
 import os
+import gym
 import json
 import random
 from datetime import datetime
 import argparse
 import numpy as np
-import time
 from collections import namedtuple, deque
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from gridworld_env import Env
 
 # Define the DQN hyperparameters
-BUFFER_SIZE = 10000             # replay buffer size: paper uses 1M
+BUFFER_SIZE = (int)(1e4)         # replay buffer size: paper uses 1M
 BATCH_SIZE = 32                  # minibatch size
-GAMMA = 0.9                      # discount factor
-TAU = 1e-3                       # for soft update of target parameters
+GAMMA = 0.99                     # discount factor
 UPDATE_EVERY = 4                 # how often to update the network
-FREEZE_INTERVAL = 10000          # the paper uses 10k
-LAST_STEP_DECREASING_EPS = 10000 # epsilon will decrease from 1 to 0.1 until this step
-N_STEP_EVAL = (int)(1e4)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
+FREEZE_INTERVAL = 100          # the paper uses 10k
+LAST_STEP_DECREASING_EPS = 1e6   # epsilon will decrease from 1 to 0.1 until this step
+N_STEP_EVAL = (int)(100)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
 
 
 parser = argparse.ArgumentParser(description='Avg DQN')
 parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
-parser.add_argument('--num_model', type=int, default=5, metavar='N', help='K in Avg DQN')
-parser.add_argument('--env_name', type=str, default='GridWorld', metavar='N', help='environment for experiment')
-parser.add_argument('--total_steps', type=float, default=2e6, metavar='N', help='number of steps for training')
-parser.add_argument('--quick_stop', type=str, default='n', help='train util last episode? [y/n]')
-parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
-parser.add_argument('--grid_size', type=int, default=20, help='size of the gridworld')
-parser.add_argument('--step_size_testing', type=int, default=10000, help='step size of testing')
-
+parser.add_argument('--num_model', type=int, default=100, metavar='N', help='K in Avg DQN')
+parser.add_argument('--env_name', type=str, default='Roulette-v0', metavar='N', help='environment for experiment')
+parser.add_argument('--total_frames', type=float, default=120e6, metavar='N', help='number of frames for training')
+parser.add_argument('--lr', type=float, default=25e-5, help='learning rate') #paper uses 25e-5
 
 args = parser.parse_args()
 LR = args.lr
 
 env_name = (args.env_name).replace('\r', '')
-env = Env(grid=(args.grid_size,args.grid_size), seed=args.seed)
-env_test = Env(grid=(args.grid_size,args.grid_size), seed=args.seed)
-print('State shape: ', env.gridsize)
-print('Number of Actions: ', env.action_space.shape)
+env = gym.make(env_name)
+env_test = gym.make(env_name)
+print('State shape: ', env.observation_space.shape)
+print('Number of Actions: ', env.action_space.n)
 
+env.seed(args.seed)
 random.seed(args.seed)
 np.random.seed(args.seed)
-torch.manual_seed(args.seed)
-torch.cuda.manual_seed(args.seed)
 
-# Use GPU is possible else use CPU
+# device = torch.device("cpu")
+
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_no
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -60,52 +55,17 @@ LAST_SCORE = 0
 LAST_FRAMES = 0
 
 
-def init_buffer(env, agent):
-    '''
-        initialize all possible transitions into buffer
-    '''
-    n_states = env.gridsize
-
-    # there are row*col-1 possibible agent location
-    for row in range(n_states[0]):
-        for col in range(n_states[1]):
-            for action in range(4):
-                if row == n_states[0]-1 and col == n_states[1]-1:
-                    break
-
-                # action(up:0, down:1, right:2, left:3)
-                state = env.set_agent_loc(row, col)
-                next_state, reward, done = env.step(action)
-                agent.memory.add(state, action, reward, next_state, done)
-
-
 class QNetwork(nn.Module):
     """Actor (Policy) Model."""
 
-    def __init__(self, state_size, action_size, seed, fc1_units=80, fc2_units=80, env_name = ''):
-        """Initialize parameters and build model.
-        Params
-        ======
-            state_size (int): Dimension of each state
-            action_size (int): Dimension of each action
-            seed (int): Random seed
-            fc1_units (int): Number of nodes in first hidden layer
-            fc2_units (int): Number of nodes in second hidden layer
-        """
+    def __init__(self, action_size):
         super(QNetwork, self).__init__()
-        env_name = env_name.replace('\r', '')
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(state_size, fc1_units)
-        self.fc2 = nn.Linear(fc1_units, fc2_units)
-        self.fc3 = nn.Linear(fc2_units, action_size)
+        self.Q = nn.Parameter(torch.rand(1, action_size), requires_grad=True)
 
     def forward(self, state):
         """Build a network that maps state -> action values."""
-        x = self.flatten(state)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        # return self.Q + state
+        return self.Q.repeat(state.shape[0], 1)
 
 
 class Agent():
@@ -124,10 +84,10 @@ class Agent():
         self.action_size = action_size
 
         # Q-Network
-        self.qnetwork_local = QNetwork(state_size, action_size, seed, env_name=env_name).to(device)
+        self.qnetwork_local = QNetwork(action_size).to(device)
         self.qnetwork_targets = deque()
         for _ in range(args.num_model):
-            self.qnetwork_targets.append(QNetwork(state_size, action_size, seed, env_name=env_name).to(device))
+            self.qnetwork_targets.append(QNetwork(action_size).to(device))
         # create this list to maintain the order of newest to oldest target network
         self.qnetwork_targets_idx = [i for i in range(args.num_model)]
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
@@ -138,15 +98,19 @@ class Agent():
         self.t_step = 0
         self.replace_model = 0
 
-    def step(self):
+    def step(self, state, action, reward, next_state, done):
+        # Save experience in replay memory
+        self.memory.add(state, action, reward, next_state, done)
+
         # Learn every UPDATE_EVERY time steps.
         self.t_step += 1
         if self.t_step % UPDATE_EVERY == 0:
-            experiences = self.memory.sample()
-            self.learn(experiences, GAMMA)
+            # If enough samples are available in memory, get random subset and learn
+            if len(self.memory) > BATCH_SIZE:
+                experiences = self.memory.sample()
+                self.learn(experiences, GAMMA)
         if self.t_step % FREEZE_INTERVAL == 0:
-            self.soft_update(self.qnetwork_local, self.qnetwork_targets, TAU)
-            # print("updated model")
+            self.soft_update(self.qnetwork_local, self.qnetwork_targets)
 
 
     def act(self, state, eps=0.):
@@ -201,7 +165,7 @@ class Agent():
         loss.backward()
         self.optimizer.step()                     
 
-    def soft_update(self, local_model, target_models, tau):
+    def soft_update(self, local_model, target_models):
         """Soft update model parameters.
         θ_target = τ*θ_local + (1 - τ)*θ_target
 
@@ -209,11 +173,9 @@ class Agent():
         ======
             local_model (PyTorch model): weights will be copied from
             target_model (PyTorch model): weights will be copied to
-            tau (float): interpolation parameter 
         """
         target_model = target_models[self.replace_model]
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-            # target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
             target_param.data.copy_(local_param.data)
         #update list maintaining the newest-oldest target model order: newest is in the last element
         self.qnetwork_targets_idx.remove(self.replace_model)
@@ -222,7 +184,6 @@ class Agent():
         self.replace_model += 1
         if self.replace_model >= args.num_model:
             self.replace_model -= args.num_model
-
 
 
     def take_value_estimate(self, state):
@@ -275,29 +236,24 @@ class ReplayBuffer:
         """Return the current size of internal memory."""
         return len(self.memory)
 
-def evaluate(args, agent, eps):
-    start_time = time.time()
-    state = env_test.reset(random_loc=False)
-    score = 0; score_list = []; value_est = 0; n_steps_cur_episode = 0.0
-    for i in range(args.step_size_testing): #evaluate per step_size_testing
-        action = agent.act(state, eps=eps)
-        next_state, reward, done = env_test.step(action)
+
+def evaluate(agent, env_name):
+    state = env_test.reset()
+    state = [state]
+
+    score = 0; value_est = 0; n_steps_cur_episode = 0.0
+    from itertools import count
+    for t in count():
+        action = agent.act(state)
+        next_state, reward, done, _ = env.step(action)
+        next_state = [next_state]
         value_est += agent.take_value_estimate(state)
         state = next_state
         score += reward
         n_steps_cur_episode += 1.0
         if done:
-            score_list.append(score)
-            score = 0
-            state = env_test.reset(random_loc=False)
-    if len(score_list) == 0:
-        mean_score = 0
-    else:
-        mean_score = np.mean(score_list)
-        # min, max = np.min(score_list), np.max(score_list)
-    end_time = time.time()
-    print("\nEval. time with " + str(args.step_size_testing) + " steps: ", end_time-start_time)
-    return mean_score, value_est/n_steps_cur_episode
+            break
+    return score/n_steps_cur_episode, value_est/n_steps_cur_episode
 
 
 def store_json(scores, value_ests):
@@ -311,7 +267,6 @@ def store_json(scores, value_ests):
                 'BUFFER_SIZE': BUFFER_SIZE,
                 'BATCH_SIZE': BATCH_SIZE,
                 'GAMMA': GAMMA,
-                'TAU': TAU,
                 'LR': LR,
                 'UPDATE_EVERY': UPDATE_EVERY,
                 'FREEZE_INTERVAL': FREEZE_INTERVAL,
@@ -319,16 +274,16 @@ def store_json(scores, value_ests):
                 'N_STEP_EVAL': N_STEP_EVAL
     })
 
-    with open('log/recent' + '_' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
+    with open('log/' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
         json.dump(log, outfile)
 
 
-def dqn(agent, total_steps, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.995): #paper use eps_end = 0.1
+def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.995): #paper use eps_end = 0.1
     """Deep Q-Learning.
     
     Params
     ======
-        total_steps (float): maximum number of training frames
+        total_frames (float): maximum number of training frames
         max_t (int): maximum number of timesteps per episode
         eps_start (float): starting value of epsilon, for epsilon-greedy action selection
         eps_end (float): minimum value of epsilon
@@ -340,61 +295,59 @@ def dqn(agent, total_steps, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.
     value_ests = []                        # list containing value estimates from each episode
     value_ests_window = deque(maxlen=100)  # last 100 scores
     eps = eps_start                        # initialize epsilon
-    current_steps = 0                      # initialize total frames
-    score = 0; value_est = 0
-    # initialize ER buffer
-    init_buffer(env, agent)
-    start_time = time.time()
+    total_steps = 0                        # initialize total frames
     from itertools import count as cnt1
     # for i_episode in range(1, n_episodes+1):
     for i_episode in cnt1():
         i_episode += 1
-        state = env.reset(random_loc=False)
-        n_steps_cur_episode = 0.0
+        state = env.reset()
+        state = [state]
+
+        score = 0; value_est = 0; n_steps_cur_episode = 0.0
 
         # for t in range(max_t):
         from itertools import count as cnt2
         for t in cnt2():
             action = agent.act(state, eps)
-            current_eps = ((eps_end - eps_start) * (float)(current_steps) / LAST_STEP_DECREASING_EPS) + eps_start
+            current_eps = ((eps_end - eps_start) * (float)(total_steps) / LAST_STEP_DECREASING_EPS) + eps_start
             eps = max(eps_end, current_eps)  # use linear interpolation decay
-            next_state, reward, done, = env.step(action)
-            agent.step()
+            next_state, reward, done, _ = env.step(action)
+            next_state = [next_state]
+            agent.step(state, action, reward, next_state, done)
 
-            if (current_steps%N_STEP_EVAL == 0): #evaluate the agent per N_STEP_EVAL
-                score, value_est = evaluate(args, agent, eps)
+            if (total_steps%N_STEP_EVAL == 0): #evaluate the agent per N_STEP_EVAL
+                score, value_est = evaluate(agent,args.env_name)
                 scores_window.append(score)
                 value_ests_window.append(value_est)
                 scores.append(score)  # save most recent score
                 value_ests.append(value_est)  # save most recent value est.
-                store_json(scores, value_ests)
                 LAST_SCORE = score
-                end_time = time.time()
-                print("Time per logging:", end_time-start_time, ", per", N_STEP_EVAL, "steps")
-                start_time = time.time()
             state = next_state
             n_steps_cur_episode += 1.0
-            current_steps += 1
-            LAST_FRAMES = current_steps
-            
-            if current_steps % 2500 == 0:
-                print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name,
-                                                                                                         i_episode,
-                                                                                                         current_steps,
-                                                                                                         score,
-                                                                                                         value_est))
+            total_steps += 1
+            LAST_FRAMES = total_steps
             if done:
                 break
 
         LAST_EPISODE = i_episode
-        if (current_steps >= total_steps): #quite training after total_steps
+        print('\rEnv {}    Episode {}    Steps {}    Average Score: {:.2f}    Value Est.: {:.2f}'.format(env_name, i_episode,
+                                                                                                 total_steps, score,
+                                                                                                 value_est), end="")
+        if i_episode % 100 == 0:
+            store_json(scores, value_ests)
+            print('\rEnv {}    Episode {}    Steps {}    Average Score: {:.2f}    Value Est.: {:.2f}'.format(env_name, i_episode,
+                                                                                                     total_steps, score,
+                                                                                                     value_est))
+
+        if (total_steps >= total_frames): #quite training after total_frames
             break
+
     return scores, value_ests
 
-state_size = env.gridsize[0] * env.gridsize[1]
+state_size = env.observation_space.shape
 agent = Agent(state_size=state_size,
-              action_size=env.action_space.shape[0],
+              action_size=env.action_space.n,
               seed=args.seed,
               env_name=env_name)
-scores, value_ests = dqn(agent, total_steps=args.total_steps)
+scores, value_ests = dqn(agent, total_frames=args.total_frames)
 
