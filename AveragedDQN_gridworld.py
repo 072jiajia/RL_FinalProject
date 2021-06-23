@@ -376,9 +376,7 @@ def dqn(agent, total_steps, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.
             n_steps_cur_episode += 1.0
             current_steps += 1
             LAST_FRAMES = current_steps
-            print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
-                                                                                                     current_steps, score,
-                                                                                                     value_est), end="")
+            
             if current_steps % 2500 == 0:
                 print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name,
                                                                                                          i_episode,
