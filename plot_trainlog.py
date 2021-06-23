@@ -3,15 +3,21 @@ import json, glob
 import numpy as np
 
 # put all (typically 7) logfiles for each "k", for all seed numbers, in separated folder
-FOLDER_PATH = ["log/lunarlander_k1",
+LUNARLANDER = ["log/lunarlander_k1",
                "log/lunarlander_k5",
                "log/lunarlander_k10",
                "log/lunarlander_k15"]
+
+GRIDWORLD = ['log/gridworld_k1',
+             'log/gridworld_k5']
+
+FOLDER_PATH = GRIDWORLD
 
 def main():
     avg_sc_list = []; std_sc_list = []; avg_val_list = []; std_val_list = []; idx_list = []
     for path in FOLDER_PATH:
         avg_score, std_score, avg_val_est, std_val_est, idx = read_log(path)
+        print("----------------_>", path)
         avg_sc_list.append(avg_score); std_sc_list.append(std_score)
         avg_val_list.append(avg_val_est); std_val_list.append(std_val_est); idx_list.append(idx)
 

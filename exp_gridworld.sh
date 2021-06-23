@@ -1,5 +1,5 @@
 ENV='gridworld'
-NUM_MODEL='15'
+NUM_MODEL='30'
 GPU_NO='7'
 TOTAL_STEPS='2000000'
 
