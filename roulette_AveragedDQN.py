@@ -20,7 +20,7 @@ GAMMA = 0.99                     # discount factor
 UPDATE_EVERY = 4                 # how often to update the network
 FREEZE_INTERVAL = 100          # the paper uses 10k
 LAST_STEP_DECREASING_EPS = 1e6   # epsilon will decrease from 1 to 0.1 until this step
-N_STEP_EVAL = (int)(100)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
+N_STEP_EVAL = (int)(1000)         # agent will be evaluated per this number of training steps, & the paper uses 1M or 2M
 
 
 parser = argparse.ArgumentParser(description='Avg DQN')
@@ -253,7 +253,7 @@ def evaluate(agent, env_name):
         n_steps_cur_episode += 1.0
         if done:
             break
-    return score/n_steps_cur_episode, value_est/n_steps_cur_episode
+    return score, value_est/n_steps_cur_episode
 
 
 def store_json(scores, value_ests):
@@ -273,8 +273,10 @@ def store_json(scores, value_ests):
                 'LAST_STEP_DECREASING_EPS': LAST_STEP_DECREASING_EPS,
                 'N_STEP_EVAL': N_STEP_EVAL
     })
+    os.makedirs('log/' + env_name.lower(), exist_ok=True)
+    os.makedirs('log/' + env_name.lower()+'/k'+str(args.num_model)+"_efficient", exist_ok=True)
 
-    with open('log/' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
+    with open('log/' + env_name.lower()+'/k'+str(args.num_model)+"_efficient/seed"+str(args.seed)+".json", 'w') as outfile:
         json.dump(log, outfile)
 
 
