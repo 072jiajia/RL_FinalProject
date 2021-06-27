@@ -15,7 +15,7 @@ from gridworld_env import Env
 
 # Define the DQN hyperparameters
 BUFFER_SIZE = 10000             # replay buffer size: paper uses 1M
-BATCH_SIZE = 32                  # minibatch size
+BATCH_SIZE = 32                  # mini-batch size
 GAMMA = 0.9                      # discount factor
 TAU = 1e-3                       # for soft update of target parameters
 UPDATE_EVERY = 4                 # how often to update the network
@@ -235,6 +235,17 @@ class Agent():
             value_estimate = np.max(value_estimate.cpu().detach().numpy())
         return value_estimate
 
+    def take_value_estimate_v2(self, state):
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)
+        with torch.no_grad():
+            value_estimate = 0
+            for k in range(args.num_model-1,-1,-1): #loop from the newest to the oldest model, in case later needed for recency-weighting avg
+                value_estimate += self.qnetwork_targets[self.qnetwork_targets_idx[k]](state)
+            value_estimate = value_estimate / args.num_model
+            action = np.argmax(value_estimate.cpu().detach().numpy())
+            value_estimate = np.max(value_estimate.cpu().detach().numpy())
+        return value_estimate, action
+
 
 class ReplayBuffer:
     """Fixed-size buffer to store experience tuples."""
@@ -299,12 +310,65 @@ def evaluate(args, agent, eps):
     print("\nEval. time with " + str(args.step_size_testing) + " steps: ", end_time-start_time)
     return mean_score, value_est/n_steps_cur_episode
 
+def evaluate_new(args, agent, eps):
+    start_time = time.time()
+    # evaluate score and value estimate when agent only consider behav. net
+    state = env_test.reset(random_loc=False)
+    score = 0; score_list = []; value_est = 0; n_steps = 0.0
+    for i in range(args.step_size_testing): #evaluate per step_size_testing
+        action = agent.act(state, eps=eps)
+        next_state, reward, done = env_test.step(action)
+        value_est += agent.take_value_estimate(state)
+        state = next_state
+        score += reward
+        n_steps += 1.0
+        if done:
+            score_list.append(score)
+            score = 0
+            state = env_test.reset(random_loc=False)
+    if len(score_list) == 0:
+        mean_score1 = 0
+    else:
+        mean_score1 = np.mean(score_list)
+        # min, max = np.min(score_list), np.max(score_list)
+    value_est1 = value_est / n_steps
 
-def store_json(scores, value_ests):
+    # evaluate score and value estimate when agent consider K net
+    state = env_test.reset(random_loc=False)
+    score = 0; score_list = []; value_est = 0; n_steps = 0.0
+    for i in range(args.step_size_testing):  # evaluate per step_size_testing
+        value_estimate, action_from_net = agent.take_value_estimate_v2(state)
+        # Epsilon-greedy action selection
+        if random.random() > eps:
+            action = action_from_net
+        else:
+            action = random.choice(np.arange(env.action_space.shape[0]))
+        value_est += value_estimate
+        # action = agent.act(state)
+        next_state, reward, done = env_test.step(action)
+        state = next_state
+        score += reward
+        n_steps += 1.0
+        if done:
+            score_list.append(score)
+            score = 0
+            state = env_test.reset(random_loc=False)
+    if len(score_list) == 0:
+        mean_score2 = 0
+    else:
+        mean_score2 = np.mean(score_list)
+    value_est2 = value_est / n_steps
+    end_time = time.time()
+    print("\nEval. time with " + str(args.step_size_testing) + " steps: ", end_time - start_time)
+    return mean_score1, value_est1, mean_score2, value_est2
+
+def store_json(scores1, value_ests1, scores2, value_ests2):
     # create log file
     time_now = datetime.now()
     time_string = time_now.strftime("%Y-%m-%d_%H-%M-%S")
-    log = {'time': time_string, 'last_steps': LAST_FRAMES, 'last_episode': LAST_EPISODE, 'last_score': LAST_SCORE, 'scores': scores, 'value_est': value_ests}
+    log = {'time': time_string, 'last_steps': LAST_FRAMES, 'last_episode': LAST_EPISODE,
+           'last_score': LAST_SCORE, 'scores1': scores1, 'value_est1': value_ests1,
+           'scores2': scores2, 'value_est2': value_ests2}
 
     # save other parameters just in case that we change them in future experiments
     log.update({'NETWORK': repr(agent.qnetwork_local),
@@ -335,13 +399,15 @@ def dqn(agent, total_steps, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.
         eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
     """
     global LAST_SCORE, LAST_EPISODE, LAST_FRAMES
-    scores = []                            # list containing scores from each episode
+    scores1 = []                           # list containing scores from each episode
+    scores2 = []                           # list containing scores from each episode
     scores_window = deque(maxlen=100)      # last 100 scores
-    value_ests = []                        # list containing value estimates from each episode
+    value_ests1 = []                       # list containing value estimates from each episode
+    value_ests2 = []                       # list containing value estimates from each episode
     value_ests_window = deque(maxlen=100)  # last 100 scores
     eps = eps_start                        # initialize epsilon
     current_steps = 0                      # initialize total frames
-    score = 0; value_est = 0
+    score1 = 0; value_est1 = 0
     # initialize ER buffer
     init_buffer(env, agent)
     start_time = time.time()
@@ -362,13 +428,15 @@ def dqn(agent, total_steps, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.
             agent.step()
 
             if (current_steps%N_STEP_EVAL == 0): #evaluate the agent per N_STEP_EVAL
-                score, value_est = evaluate(args, agent, eps)
-                scores_window.append(score)
-                value_ests_window.append(value_est)
-                scores.append(score)  # save most recent score
-                value_ests.append(value_est)  # save most recent value est.
-                store_json(scores, value_ests)
-                LAST_SCORE = score
+                score1, value_est1, score2, value_est2 = evaluate_new(args, agent, eps) #record two mode testing
+                scores_window.append(score1)
+                value_ests_window.append(value_est1)
+                scores1.append(score1)  # save most recent score
+                scores2.append(score2)  # save most recent score
+                value_ests1.append(value_est1)  # save most recent value est.
+                value_ests2.append(value_est2)  # save most recent value est.
+                store_json(scores1, value_ests1, scores2, value_ests2)
+                LAST_SCORE = score1
                 end_time = time.time()
                 print("Time per logging:", end_time-start_time, ", per", N_STEP_EVAL, "steps")
                 start_time = time.time()
@@ -381,20 +449,18 @@ def dqn(agent, total_steps, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0.
                 print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name,
                                                                                                          i_episode,
                                                                                                          current_steps,
-                                                                                                         score,
-                                                                                                         value_est))
+                                                                                                         score1,
+                                                                                                         value_est1))
             if done:
                 break
 
         LAST_EPISODE = i_episode
         if (current_steps >= total_steps): #quite training after total_steps
             break
-    return scores, value_ests
 
 state_size = env.gridsize[0] * env.gridsize[1]
 agent = Agent(state_size=state_size,
               action_size=env.action_space.shape[0],
               seed=args.seed,
               env_name=env_name)
-scores, value_ests = dqn(agent, total_steps=args.total_steps)
-
+dqn(agent, total_steps=args.total_steps)

@@ -89,10 +89,10 @@ class Env:
         return self.grid.copy()
 
 
-# if __name__ == '__main__':
-#     env = Env()
-#     state = env.reset(random_loc=False)
-#     state = env.step(1)
-#     state = env.step(2)
-#     state = env.reset(random_loc=False)
-#     print(state)
+if __name__ == '__main__':
+    env = Env()
+    state = env.reset(random_loc=False)
+    state = env.step(1)
+    state = env.step(2)
+    state = env.reset(random_loc=False)
+    print(state)
