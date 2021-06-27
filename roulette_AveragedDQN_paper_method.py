@@ -134,6 +134,34 @@ class Agent():
         else:
             return random.choice(np.arange(self.action_size))
 
+    def act_v2(self, state, eps=0.):
+        """Returns actions for given state as per current policy.
+        
+        Params
+        ======
+            state (array_like): current state
+            eps (float): epsilon, for epsilon-greedy action selection
+        """
+        # state = torch.from_numpy(state).float().unsqueeze(0).to(device)
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)
+        self.qnetwork_local.train()
+
+        with torch.no_grad():
+            value_estimate = 0
+            for k in range(args.num_model-1,-1,-1): #loop from the newest to the oldest model, in case later needed for recency-weighting avg
+                net = self.qnetwork_targets[self.qnetwork_targets_idx[k]]
+                net.eval()
+                value_estimate += net(state)
+                net.train()
+            action_values = value_estimate / args.num_model
+            value_estimate = np.max(action_values.cpu().detach().numpy())
+
+        # Epsilon-greedy action selection
+        if random.random() > eps:
+            return np.argmax(action_values.cpu().data.numpy()), value_estimate
+        else:
+            return random.choice(np.arange(self.action_size)), value_estimate
+
     def learn(self, experiences, gamma):
         """Update value parameters using given batch of experience tuples.
 
@@ -186,16 +214,6 @@ class Agent():
             self.replace_model -= args.num_model
 
 
-    def take_value_estimate(self, state):
-        state = torch.FloatTensor(state).unsqueeze(0).to(device)
-        with torch.no_grad():
-            value_estimate = 0
-            for k in range(args.num_model-1,-1,-1): #loop from the newest to the oldest model, in case later needed for recency-weighting avg
-                value_estimate += self.qnetwork_targets[self.qnetwork_targets_idx[k]](state)
-            value_estimate = value_estimate / args.num_model
-            value_estimate = np.max(value_estimate.cpu().detach().numpy())
-        return value_estimate
-
 
 class ReplayBuffer:
     """Fixed-size buffer to store experience tuples."""
@@ -244,10 +262,10 @@ def evaluate(agent, env_name):
     score = 0; value_est = 0; n_steps_cur_episode = 0.0
     from itertools import count
     for t in count():
-        action = agent.act(state)
+        action, estimate_value = agent.act_v2(state)
         next_state, reward, done, _ = env.step(action)
         next_state = [next_state]
-        value_est += agent.take_value_estimate(state)
+        value_est += estimate_valued
         state = next_state
         score += reward
         n_steps_cur_episode += 1.0
@@ -274,9 +292,9 @@ def store_json(scores, value_ests):
                 'N_STEP_EVAL': N_STEP_EVAL
     })
     os.makedirs('log/' + env_name.lower(), exist_ok=True)
-    os.makedirs('log/' + env_name.lower()+'/k'+str(args.num_model)+"_efficient", exist_ok=True)
+    os.makedirs('log/' + env_name.lower()+'/k'+str(args.num_model), exist_ok=True)
 
-    with open('log/' + env_name.lower()+'/k'+str(args.num_model)+"_efficient/seed"+str(args.seed)+".json", 'w') as outfile:
+    with open('log/' + env_name.lower()+'/k'+str(args.num_model)+"/seed"+str(args.seed)+".json", 'w') as outfile:
         json.dump(log, outfile)
 
 
