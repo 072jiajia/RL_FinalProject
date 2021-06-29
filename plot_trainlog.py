@@ -5,6 +5,7 @@ import numpy as np
 # GLOBAL VAR
 AXIS_FONT_SIZE = 18 #gridsearch uses 18
 LEGEND_FONT_SIZE = 11 #gridsearch uses 11
+OPTIMAL = 0
 
 # put all (typically 7) logfiles for each "k", for all seed numbers, in separated folder
 LUNARLANDER_OLD = ["log/lunarlander_k1",
@@ -16,10 +17,10 @@ LUNARLANDER_NEW = ["log/new_lunarlander_k1",
                "log/new_lunarlander_k10",
                "log/new_lunarlander_k15"]
 LUNARLANDER = LUNARLANDER_OLD
-GRIDWORLD = ['log/gridworld_k1',
-             'log/gridworld_k5',
-             'log/gridworld_k10',
-             'log/gridworld_k15']
+GRIDWORLD = ['log/gridworld5M_k1',
+             'log/gridworld5M_k5',
+             'log/gridworld5M_k10',
+             'log/gridworld5M_k15']
 
 # Ks = list(range(1, 11)) + [15, 20, 25, 50, 100]
 Ks = [1,2,3,4,5]
@@ -29,11 +30,12 @@ ROULETTE = ["log/roulette_k" + str(k) for k in Ks] + ["log/roulette_ddqn"]
 # label = ['Averaged DQN, K=' + str(K) for K in Ks]
 label = ['K=' + str(K) for K in Ks] + ["Double QDN"]
 
-FOLDER_PATH = GRIDWORLD
+FOLDER_PATH = LUNARLANDER_OLD
 if FOLDER_PATH == GRIDWORLD:
-    sample_every_n_element = 4
+    sample_every_n_element = 10
     Ks = [1, 5, 10, 15]
     label = ['K=' + str(K) for K in Ks]
+    OPTIMAL = 0.258
 elif FOLDER_PATH == LUNARLANDER:
     sample_every_n_element = 10
     Ks = [1, 5, 10, 15]
@@ -72,7 +74,7 @@ def main():
             plt.plot(idx_list[i], avg_val_list[i], ':', label=label[i], linewidth=1)
         plt.fill_between(idx_list[i], avg_val_list[i] - std_val_list[i], avg_val_list[i] + std_val_list[i], alpha=0.3)
     if FOLDER_PATH == GRIDWORLD:
-        plt.plot(idx_list[0], [0.252]*len(idx_list[0]), '--', label="Optimal", linewidth=2)
+        plt.plot(idx_list[0], [OPTIMAL]*len(idx_list[0]), '--', label="Optimal", linewidth=2)
         plt.xlabel("Steps (per 10k)", fontsize=AXIS_FONT_SIZE)
     else:
         plt.xlabel("Episode", fontsize=AXIS_FONT_SIZE)
@@ -125,7 +127,32 @@ def read_log(path, sample_every_n_element=None):
         idx = idx[0:idx.shape[0]:sample_every_n_element]
         # idx = idx
 
-
+    # calculate avg of bias and standard dev from convergence point
+    if FOLDER_PATH == GRIDWORLD:
+        mask = idx > 300 # evaluate only for those more 3jt training steps
+        std_val_converged = std_val_est[mask]
+        value_std_converged_mean = np.round(np.mean(std_val_converged),
+                                            decimals=3)
+        value_est_bias_converged = OPTIMAL - avg_val_est[mask]
+        value_est_bias_converged_mean = np.round(np.mean(value_est_bias_converged),
+                                                 decimals=3)
+        score_bias_converged = 1 - avg_score[mask]
+        score_bias_converged_mean = np.round(np.mean(score_bias_converged),
+                                             decimals=3)
+        print("Path:", path)
+        print("value_std_mean: ", value_std_converged_mean, ", val_bias_mean:", value_est_bias_converged_mean,
+              ", score_bias mean:", score_bias_converged_mean)
+    if FOLDER_PATH == LUNARLANDER:
+        mask = idx > 600 # evaluate only for those more 3jt training steps
+        std_val_converged = std_val_est[mask]
+        value_std_converged_mean = np.round(np.mean(std_val_converged),
+                                            decimals=3)
+        score_converged = avg_score[mask]
+        score_converged_mean = np.round(np.mean(score_converged),
+                                             decimals=3)
+        print("Path:", path)
+        print("value_std_mean: ", value_std_converged_mean,
+              ", score mean:", score_converged_mean)
     return avg_score, std_score, avg_val_est, std_val_est, idx
 
 main()
