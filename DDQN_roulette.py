@@ -3,6 +3,7 @@ import gym
 import json
 import random
 from datetime import datetime
+from itertools import count
 import argparse
 import numpy as np
 from collections import namedtuple, deque
@@ -44,7 +45,6 @@ env.seed(args.seed)
 random.seed(args.seed)
 np.random.seed(args.seed)
 
-# device = torch.device("cpu")
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_no
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -64,7 +64,6 @@ class QNetwork(nn.Module):
 
     def forward(self, state):
         """Build a network that maps state -> action values."""
-        # return self.Q + state
         return self.Q.repeat(state.shape[0], 1)
 
 
@@ -226,7 +225,6 @@ def evaluate(agent, env_name):
     state = [state]
 
     score = 0; value_est = 0; n_steps_cur_episode = 0.0
-    from itertools import count
     for t in count():
         action = agent.act(state)
         next_state, reward, done, _ = env.step(action)
@@ -280,18 +278,15 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
     value_ests_window = deque(maxlen=100)  # last 100 scores
     eps = eps_start                        # initialize epsilon
     total_steps = 0                        # initialize total frames
-    from itertools import count as cnt1
-    # for i_episode in range(1, n_episodes+1):
-    for i_episode in cnt1():
+
+    for i_episode in count():
         i_episode += 1
         state = env.reset()
         state = [state]
 
         score = 0; value_est = 0; n_steps_cur_episode = 0.0
 
-        # for t in range(max_t):
-        from itertools import count as cnt2
-        for t in cnt2():
+        for t in count():
             action = agent.act(state, eps)
             current_eps = ((eps_end - eps_start) * (float)(total_steps) / LAST_STEP_DECREASING_EPS) + eps_start
             eps = max(eps_end, current_eps)  # use linear interpolation decay
@@ -314,9 +309,7 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
                 break
 
         LAST_EPISODE = i_episode
-        print('\rEnv {}    Episode {}    Steps {}    Average Score: {:.2f}    Value Est.: {:.2f}'.format(env_name, i_episode,
-                                                                                                 total_steps, score,
-                                                                                                 value_est), end="")
+        print('\rEnv {}    Episode {}    Steps {}    '.format(env_name, i_episode, total_steps), end="")
         if i_episode % 100 == 0:
             store_json(scores, value_ests)
             print('\rEnv {}    Episode {}    Steps {}    Average Score: {:.2f}    Value Est.: {:.2f}'.format(env_name, i_episode,

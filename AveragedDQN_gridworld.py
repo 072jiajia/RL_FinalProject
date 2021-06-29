@@ -17,7 +17,6 @@ from gridworld_env import Env
 BUFFER_SIZE = 10000             # replay buffer size: paper uses 1M
 BATCH_SIZE = 32                  # mini-batch size
 GAMMA = 0.9                      # discount factor
-TAU = 1e-3                       # for soft update of target parameters
 UPDATE_EVERY = 4                 # how often to update the network
 FREEZE_INTERVAL = 10000          # the paper uses 10k
 LAST_STEP_DECREASING_EPS = 10000 # epsilon will decrease from 1 to 0.1 until this step
@@ -145,8 +144,7 @@ class Agent():
             experiences = self.memory.sample()
             self.learn(experiences, GAMMA)
         if self.t_step % FREEZE_INTERVAL == 0:
-            self.soft_update(self.qnetwork_local, self.qnetwork_targets, TAU)
-            # print("updated model")
+            self.update_target(self.qnetwork_local, self.qnetwork_targets)
 
 
     def act(self, state, eps=0.):
@@ -201,20 +199,18 @@ class Agent():
         loss.backward()
         self.optimizer.step()                     
 
-    def soft_update(self, local_model, target_models, tau):
-        """Soft update model parameters.
-        θ_target = τ*θ_local + (1 - τ)*θ_target
+    def update_target(self, local_model, target_models):
+        """ Update model parameters.
 
         Params
         ======
             local_model (PyTorch model): weights will be copied from
             target_model (PyTorch model): weights will be copied to
-            tau (float): interpolation parameter 
         """
         target_model = target_models[self.replace_model]
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-            # target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
             target_param.data.copy_(local_param.data)
+
         #update list maintaining the newest-oldest target model order: newest is in the last element
         self.qnetwork_targets_idx.remove(self.replace_model)
         self.qnetwork_targets_idx.append(self.replace_model)
@@ -375,7 +371,6 @@ def store_json(scores1, value_ests1, scores2, value_ests2):
                 'BUFFER_SIZE': BUFFER_SIZE,
                 'BATCH_SIZE': BATCH_SIZE,
                 'GAMMA': GAMMA,
-                'TAU': TAU,
                 'LR': LR,
                 'UPDATE_EVERY': UPDATE_EVERY,
                 'FREEZE_INTERVAL': FREEZE_INTERVAL,

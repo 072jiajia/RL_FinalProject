@@ -3,6 +3,7 @@ import gym
 import json
 import random
 from datetime import datetime
+from itertools import count
 import argparse
 import numpy as np
 from collections import namedtuple, deque
@@ -18,7 +19,6 @@ import torch.optim as optim
 BUFFER_SIZE = (int)(1e6)         # replay buffer size: paper uses 1M
 BATCH_SIZE = 32                  # minibatch size
 GAMMA = 0.99                     # discount factor
-TAU = 1e-3                       # for soft update of target parameters
 UPDATE_EVERY = 4                 # how often to update the network
 FREEZE_INTERVAL = 10000          # the paper uses 10k
 LAST_STEP_DECREASING_EPS = 1e6   # epsilon will decrease from 1 to 0.1 until this step
@@ -60,53 +60,36 @@ LAST_SCORE = 0
 LAST_FRAMES = 0
 
 
-def is_Atari(env_name):
-    return env_name == 'Seaquest-v0' or env_name == 'Asterix-v0' or env_name == 'Breakout-v0'
-
 class QNetwork(nn.Module):
     """Actor (Policy) Model."""
 
-    def __init__(self, state_size, action_size, seed, fc1_units=64, fc2_units=64, env_name = ''):
+    def __init__(self, state_size, action_size):
         """Initialize parameters and build model.
         Params
         ======
             state_size (int): Dimension of each state
             action_size (int): Dimension of each action
-            seed (int): Random seed
-            fc1_units (int): Number of nodes in first hidden layer
-            fc2_units (int): Number of nodes in second hidden layer
         """
         super(QNetwork, self).__init__()
-        env_name = env_name.replace('\r', '')
-        if(env_name == 'Seaquest-v0' or env_name == 'Asterix-v0' or env_name == 'Breakout-v0'):
-            self.conv = nn.Sequential(
-                nn.Conv2d(args.num_frame, 32, kernel_size=8, stride=4),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(32, 64, kernel_size=4, stride=2),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1),
-                nn.ReLU(inplace=True),
-            )
-            self.mlp = nn.Sequential(
-                nn.Linear(7 * 7 * 64, 512),
-                nn.ReLU(inplace=True),
-                nn.Linear(512, action_size),
-            )
-        else:
-            self.fc1 = nn.Linear(state_size[0] * args.num_frame, fc1_units)
-            self.fc2 = nn.Linear(fc1_units, fc2_units)
-            self.fc3 = nn.Linear(fc2_units, action_size)
+        self.conv = nn.Sequential(
+            nn.Conv2d(args.num_frame, 32, kernel_size=8, stride=4),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU(inplace=True),
+        )
+        self.mlp = nn.Sequential(
+            nn.Linear(7 * 7 * 64, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, action_size),
+        )
 
     def forward(self, state):
         """Build a network that maps state -> action values."""
-        if (env_name == 'Seaquest-v0' or env_name == 'Asterix-v0' or env_name == 'Breakout-v0'):
-            x = self.conv(state)
-            x = torch.flatten(x, 1)
-            x = self.mlp(x)
-        else:
-            x = F.relu(self.fc1(state.view(state.shape[0], -1)))
-            x = F.relu(self.fc2(x))
-            x = self.fc3(x)
+        x = self.conv(state)
+        x = torch.flatten(x, 1)
+        x = self.mlp(x)
         return x
 
 
@@ -126,10 +109,10 @@ class Agent():
         self.action_size = action_size
 
         # Q-Network
-        self.qnetwork_local = QNetwork(state_size, action_size, seed, env_name=env_name).to(device)
+        self.qnetwork_local = QNetwork(state_size, action_size).to(device)
         self.qnetwork_targets = deque()
         for _ in range(args.num_model):
-            self.qnetwork_targets.append(QNetwork(state_size, action_size, seed, env_name=env_name).to(device))
+            self.qnetwork_targets.append(QNetwork(state_size, action_size).to(device))
         # create this list to maintain the order of newest to oldest target network
         self.qnetwork_targets_idx = [i for i in range(args.num_model)]
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
@@ -152,8 +135,7 @@ class Agent():
                 experiences = self.memory.sample()
                 self.learn(experiences, GAMMA)
         if self.t_step % FREEZE_INTERVAL == 0:
-            self.soft_update(self.qnetwork_local, self.qnetwork_targets, TAU)
-            # print("updated model")
+            self.update_target(self.qnetwork_local, self.qnetwork_targets)
 
 
     def act(self, state, eps=0.):
@@ -208,20 +190,12 @@ class Agent():
         loss.backward()
         self.optimizer.step()                     
 
-    def soft_update(self, local_model, target_models, tau):
-        """Soft update model parameters.
-        θ_target = τ*θ_local + (1 - τ)*θ_target
-
-        Params
-        ======
-            local_model (PyTorch model): weights will be copied from
-            target_model (PyTorch model): weights will be copied to
-            tau (float): interpolation parameter 
-        """
+    def update_target(self, local_model, target_models):
+        """ Update model parameters """
         target_model = target_models[self.replace_model]
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-            # target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
             target_param.data.copy_(local_param.data)
+
         #update list maintaining the newest-oldest target model order: newest is in the last element
         self.qnetwork_targets_idx.remove(self.replace_model)
         self.qnetwork_targets_idx.append(self.replace_model)
@@ -229,7 +203,6 @@ class Agent():
         self.replace_model += 1
         if self.replace_model >= args.num_model:
             self.replace_model -= args.num_model
-
 
 
     def take_value_estimate(self, state):
@@ -294,7 +267,6 @@ def evaluate(agent, env_name):
 
     state = [state] * args.num_frame
     score = 0; value_est = 0; n_steps_cur_episode = 0.0
-    from itertools import count
     for t in count():
         action = agent.act(state)
         next_state, reward, done, _ = env.step(action)
@@ -321,7 +293,6 @@ def store_json(scores, value_ests):
                 'BUFFER_SIZE': BUFFER_SIZE,
                 'BATCH_SIZE': BATCH_SIZE,
                 'GAMMA': GAMMA,
-                'TAU': TAU,
                 'LR': LR,
                 'UPDATE_EVERY': UPDATE_EVERY,
                 'FREEZE_INTERVAL': FREEZE_INTERVAL,
@@ -351,9 +322,8 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
     value_ests_window = deque(maxlen=100)  # last 100 scores
     eps = eps_start                        # initialize epsilon
     total_steps = 0                        # initialize total frames
-    from itertools import count as cnt1
-    # for i_episode in range(1, n_episodes+1):
-    for i_episode in cnt1():
+
+    for i_episode in count():
         i_episode += 1
         state = env.reset()
         state = rgb2gray(state)
@@ -362,9 +332,7 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
         state = [state] * args.num_frame
         score = 0; value_est = 0; n_steps_cur_episode = 0.0
 
-        # for t in range(max_t):
-        from itertools import count as cnt2
-        for t in cnt2():
+        for t in count():
             action = agent.act(state, eps)
             current_eps = ((eps_end - eps_start) * (float)(total_steps) / LAST_STEP_DECREASING_EPS) + eps_start
             eps = max(eps_end, current_eps)  # use linear interpolation decay
@@ -373,8 +341,7 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
             next_state = cv2.resize(next_state, dsize=(84, 84))
             next_state = state[1:] + [next_state] #keep update for last args.num_frame
             agent.step(state, action, reward, next_state, done)
-            # value_est += agent.take_value_estimate(state)
-            # score += reward
+
             if (total_steps%N_STEP_EVAL == 0): #evaluate the agent per N_STEP_EVAL
                 score, value_est = evaluate(agent,args.env_name)
                 scores_window.append(score)
@@ -388,21 +355,13 @@ def dqn(agent, total_frames, max_t=1000, eps_start=1.0, eps_end=0.1, eps_decay=0
             LAST_FRAMES = total_steps
             if done:
                 break
-        # value_est = (float)(value_est)/(float)(n_steps)
-        # eps = max(eps_end, eps_decay*eps) # decrease epsilon
+
         LAST_EPISODE = i_episode
-        print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
-                                                                                                 total_steps, score,
-                                                                                                 value_est), end="")
+        print('\rEnv {}  Episode {}  Steps {}    '.format(env_name, i_episode, total_steps), end="")
         if i_episode % 100 == 0:
-            print('\rEnv {}\tEpisode {}\tSteps {}\tAverage Score: {:.2f}\tValue Est.: {:.2f}'.format(env_name, i_episode,
+            print('\rEnv {}  Episode {}  Steps {}  Average Score: {:.2f}  Value Est.: {:.2f}'.format(env_name, i_episode,
                                                                                                      total_steps, score,
                                                                                                      value_est))
-        # if np.mean(scores_window)>=200.0:
-        #     print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, np.mean(scores_window)))
-        #     torch.save(agent.qnetwork_local.state_dict(), 'checkpoint.pth')
-        #     if args.quick_stop == 'y':
-        #         break
         if (total_steps >= total_frames): #quite training after total_frames
             break
 
