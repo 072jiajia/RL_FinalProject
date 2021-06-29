@@ -19,7 +19,7 @@ LUNARLANDER = LUNARLANDER_OLD
 GRIDWORLD = ['log/gridworld_k1',
              'log/gridworld_k5',
              'log/gridworld_k10',
-             'log/gridworld4M_k15']
+             'log/gridworld_k15']
 
 # Ks = list(range(1, 11)) + [15, 20, 25, 50, 100]
 Ks = [1,2,3,4,5]
@@ -72,7 +72,7 @@ def main():
             plt.plot(idx_list[i], avg_val_list[i], ':', label=label[i], linewidth=1)
         plt.fill_between(idx_list[i], avg_val_list[i] - std_val_list[i], avg_val_list[i] + std_val_list[i], alpha=0.3)
     if FOLDER_PATH == GRIDWORLD:
-        plt.plot(idx_list[0], [0.018]*len(idx_list[0]), '--', label="Optimal", linewidth=2)
+        plt.plot(idx_list[0], [0.252]*len(idx_list[0]), '--', label="Optimal", linewidth=2)
         plt.xlabel("Steps (per 10k)", fontsize=AXIS_FONT_SIZE)
     else:
         plt.xlabel("Episode", fontsize=AXIS_FONT_SIZE)
