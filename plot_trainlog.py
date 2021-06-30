@@ -22,12 +22,10 @@ GRIDWORLD = ['log/gridworld5M_k1',
              'log/gridworld5M_k10',
              'log/gridworld5M_k15']
 
-# Ks = list(range(1, 11)) + [15, 20, 25, 50, 100]
+# the Ks using in Roulette's ablation study
 Ks = [1,2,3,4,5]
 
 ROULETTE = ["log/roulette_k" + str(k) for k in Ks] + ["log/roulette_ddqn"]
-# plot the avg and std
-# label = ['Averaged DQN, K=' + str(K) for K in Ks]
 label = ['K=' + str(K) for K in Ks] + ["Double QDN"]
 
 if args.env_name == 'gridworld':
