@@ -1,6 +1,6 @@
-# RL Group Project
+# RL Group Project: Team 12
 Code for ablation project: Averaged-DQN: Variance Reduction and Stabilization for Deep Reinforcement Learning
-
+All the code files are aready tested, thus, of any error is encountered, please kindly inform to us: `ardianumam.05g@g2.nctu.edu.tw`, or `jia.cs07@nycu.edu.tw`, or `huangsinfu91212@nctu.edu.tw`
 ## Installation
 All requirements should be detailed in requirements.txt. Using virtual environment is recommended.
 ```
