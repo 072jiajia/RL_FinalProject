@@ -72,7 +72,7 @@ def main():
         plt.xlabel("Episode", fontsize=AXIS_FONT_SIZE)
     plt.ylabel("Averaged score", fontsize=AXIS_FONT_SIZE)
     plt.legend(prop={'size': LEGEND_FONT_SIZE}, ncol=2)
-    plt.savefig('Roulette1.png')
+    plt.savefig('Averaged_score.png')
 
     plt.figure()
     for i in range(len(avg_val_list)):
@@ -90,7 +90,7 @@ def main():
     plt.legend(prop={'size': LEGEND_FONT_SIZE}, ncol=2)
     # plt.legend(bbox_to_anchor=(1, 1), loc='upper left')
 
-    plt.savefig('Roulette2.png')
+    plt.savefig('Value_estimate.png')
     plt.show()
 
 
