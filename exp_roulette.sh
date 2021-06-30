@@ -2,8 +2,8 @@ ENV='Roulette-v0'
 TOTAL_FRAMES='1e6'
 LR='1e-3'
 GPU_NO='4'
-AVERAGEDDQN_FILE='roulette_AveragedDQN.py'
-DDQN_FILE='roulette_DDQN.py'
+AVERAGEDDQN_FILE='AveragedDQN_roulette.py'
+DDQN_FILE='DDQN_roulette.py'
 
 call_function(){
     python $1 --gpu_no=$2 --seed=1 --num_model=$3 --env_name=$ENV --total_frames=$TOTAL_FRAMES --lr=$LR &
