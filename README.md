@@ -32,7 +32,7 @@ To draw the plots, please move the json files to the folders named
 ```
 And plot our result by:<br>
 ```
-python plot_trainlog.py --env=<env_name>
+python plot_trainlog.py --env_name=<env_name>
 ```
 `env_name` options are: gridwolrd, roulette or lunarlander
 
