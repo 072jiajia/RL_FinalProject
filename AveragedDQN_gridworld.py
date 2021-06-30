@@ -24,7 +24,7 @@ N_STEP_EVAL = (int)(1e4)         # agent will be evaluated per this number of tr
 
 
 parser = argparse.ArgumentParser(description='Avg DQN')
-parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No GPU')
+parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=5, metavar='N', help='K in Avg DQN')
 parser.add_argument('--env_name', type=str, default='GridWorld', metavar='N', help='environment for experiment')

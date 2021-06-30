@@ -21,7 +21,7 @@ UPDATE_EVERY = 4        # how often to update the network
 
 
 parser = argparse.ArgumentParser(description='AvgDQN')
-parser.add_argument('--gpu_no', type=str, default='5', metavar='i-th', help='No GPU')
+parser.add_argument('--gpu_no', type=str, default='0', metavar='i-th', help='No GPU')
 parser.add_argument('--seed', type=int, default=0, metavar='N', help='Seed numb.')
 parser.add_argument('--num_model', type=int, default=10, metavar='N', help='K in Avg DQN')
 parser.add_argument('--env_name', type=str, default='LunarLander-v2', metavar='N', help='environment for experiment')
