@@ -1,7 +1,7 @@
 # RL Group Project: Team 12
 Code for ablation project: Averaged-DQN: Variance Reduction and Stabilization for Deep Reinforcement Learning<br>
 All the code files are aready tested, thus, if any error is encountered, please kindly confirm to us: `ardianumam.05g@g2.nctu.edu.tw`, `jia.cs07@nycu.edu.tw`, `huangsinfu91212@nctu.edu.tw`. This code is mantained in this [Github repo](https://github.com/072jiajia/RL_FinalProject/tree/cleaned).
-## Reports
+## Report
 A detailed report of this repo can be read [here](https://drive.google.com/file/d/1sDnAcZXfYWPPwjxvOyLDQd3KW5r0trEG/view?usp=sharing).
 ## Installation
 All requirements should be detailed in requirements.txt. Using virtual environment is recommended.
@@ -21,9 +21,8 @@ However, we don't provide the experiment for Atari due to resource limitation. B
 
 **Note**: 
 * It may need to run `sed -i 's/\r$//' exp*.sh` before, to remove the '\r' due to different encoding in different OS (this causes error).
-* If error is encountered during Atari installation, you may refer [this](https://github.com/openai/gym/issues/1218).
 * If running bash script above encounters an issue, you may run directly the script by: `python AveragedDQN_*.py`
-
+* If error is encountered during Atari installation, you may refer to [this](https://github.com/openai/gym/issues/1218).
 ## Plotting The Results
 Our results are already dumped in to json files in `log` directory. You can directly plot our result by:<br>
 ```
