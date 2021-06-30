@@ -263,7 +263,7 @@ def evaluate(agent, env_name):
         action, estimate_value = agent.act_eval(state)
         next_state, reward, done, _ = env.step(action)
         next_state = [next_state]
-        value_est += estimate_valued
+        value_est += estimate_value
         state = next_state
         score += reward
         n_steps_cur_episode += 1.0
