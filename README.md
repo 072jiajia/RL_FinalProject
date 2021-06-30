@@ -26,7 +26,11 @@ However, we don't provide the experiment for Atari due to resource limitation. B
 
 ## Plotting The Results
 Our results are already dumped in to json files in `log` directory.
-To draw the plots, please move the json files to the folders named log/{env's name}\_k{number of K}
+
+To draw the plots, please move the json files to the folders named
+```
+    log/{env's name}\_k{number of K}
+```
 And plot our result by:<br>
 ```
 python plot_trainlog.py --env=<env_name>
