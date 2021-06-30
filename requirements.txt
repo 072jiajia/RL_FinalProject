@@ -2,4 +2,5 @@ gym
 torch >= 1.5
 numpy
 matplotlib
-box2d-py
+opencv-python
+Box2D
