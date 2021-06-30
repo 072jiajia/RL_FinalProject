@@ -24,7 +24,13 @@ However, we don't provide the experiment for Atari due to resource limitation. B
 * If running bash script above encounters an issue, you may run directly the script by: `python AveragedDQN_*.py`
 * If error is encountered during Atari installation, you may refer to [this](https://github.com/openai/gym/issues/1218).
 ## Plotting The Results
-Our results are already dumped in to json files in `log` directory. You can directly plot our result by:<br>
+Our results are already dumped in to json files in `log` directory.
+
+To draw the plots, please move the json files to the folders named
+```
+    log/{env's name}\_k{number of K}
+```
+And plot our result by:<br>
 ```
 python plot_trainlog.py --env=<env_name>
 ```
