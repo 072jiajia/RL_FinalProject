@@ -29,5 +29,3 @@ call_function $AVERAGEDDQN_FILE 6 100 &
 python $DDQN_FILE --gpu_no=7 --seed=1 --env_name=$ENV --total_frames=$TOTAL_FRAMES --lr=$LR &
 python $DDQN_FILE --gpu_no=7 --seed=2 --env_name=$ENV --total_frames=$TOTAL_FRAMES --lr=$LR &
 python $DDQN_FILE --gpu_no=7 --seed=3 --env_name=$ENV --total_frames=$TOTAL_FRAMES --lr=$LR
-
-
