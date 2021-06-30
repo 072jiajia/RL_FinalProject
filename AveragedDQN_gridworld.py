@@ -378,7 +378,7 @@ def store_json(scores1, value_ests1, scores2, value_ests2):
                 'N_STEP_EVAL': N_STEP_EVAL
     })
 
-    with open('log/recent' + '_' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
+    with open('log/' + env_name.lower()+'_k'+str(args.num_model)+"_seed"+str(args.seed)+".json", 'w') as outfile:
         json.dump(log, outfile)
 
 
