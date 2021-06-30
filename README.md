@@ -12,7 +12,7 @@ To install the atari games, you may follow the steps [here](https://github.com/o
 
 ## Reproducing our results
 ```
-    sh exp_{grid_world, lunarlander, roulette}.sh
+    sh exp_{gridworld, lunarlander, roulette}.sh
 ```
 
 **Note**: 
@@ -20,7 +20,7 @@ To install the atari games, you may follow the steps [here](https://github.com/o
 * one of succesful ways to install gym-atari: [here](https://github.com/openai/gym/issues/1218)
 
 
-Citation
+## Citation
 ```
 @inproceedings{anschel2017averaged,
   title={Averaged-dqn: Variance reduction and stabilization for deep reinforcement learning},
