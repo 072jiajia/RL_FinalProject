@@ -3,7 +3,7 @@ import json, glob, argparse
 import numpy as np
 
 parser = argparse.ArgumentParser(description='Avg DQN')
-parser.add_argument('--env_name', type=str, default='roulette', help='your env name')
+parser.add_argument('--env_name', type=str, default='gridworld', help='your env name')
 args = parser.parse_args()
 
 # GLOBAL VAR
@@ -25,8 +25,8 @@ GRIDWORLD = ['log/gridworld5M_k1',
 # the Ks using in Roulette's ablation study
 Ks = [1,2,3,4,5]
 
-ROULETTE = ["log/roulette_k" + str(k) for k in Ks] + ["log/roulette_ddqn"]
-label = ['K=' + str(K) for K in Ks] + ["Double QDN"]
+ROULETTE = ["log/roulette_k" + str(k) for k in Ks]
+label = ['K=' + str(K) for K in Ks]
 
 if args.env_name == 'gridworld':
     FOLDER_PATH = GRIDWORLD
